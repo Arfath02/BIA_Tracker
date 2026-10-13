@@ -1,0 +1,4 @@
+BIA tracker — confirmation and early delivery release
+Commit: 74f8622ae3664b32959e3ab900ccb962a10fa143
+SQL schema v9 unchanged. Read START_HERE.md and docs/SCHEDULING.md.
+No live data or credentials included.

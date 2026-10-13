@@ -1,0 +1,23 @@
+digraph BIA {
+graph [rankdir=TB, bgcolor="white", pad="0.3", nodesep="0.7", ranksep="0.9", splines=polyline];
+node [shape=plain, fontname="Arial"];
+edge [fontname="Arial", fontsize=11, color="#6c7a89", arrowsize=0.8];
+departments [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>departments</B></FONT></TD></TR><TR><TD PORT="id" ALIGN="LEFT">id</TD><TD ALIGN="LEFT">PK </TD></TR><TR><TD PORT="name" ALIGN="LEFT">name</TD><TD ALIGN="LEFT"> </TD></TR><TR><TD PORT="active" ALIGN="LEFT">active</TD><TD ALIGN="LEFT"> </TD></TR></TABLE>>];
+roles [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>roles</B></FONT></TD></TR><TR><TD PORT="code" ALIGN="LEFT">code</TD><TD ALIGN="LEFT">PK </TD></TR><TR><TD PORT="name" ALIGN="LEFT">name</TD><TD ALIGN="LEFT"> </TD></TR></TABLE>>];
+users [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>users</B></FONT></TD></TR><TR><TD PORT="id" ALIGN="LEFT">id</TD><TD ALIGN="LEFT">PK </TD></TR><TR><TD PORT="role" ALIGN="LEFT">role</TD><TD ALIGN="LEFT">FK</TD></TR><TR><TD PORT="departmentId" ALIGN="LEFT">departmentId</TD><TD ALIGN="LEFT">FK</TD></TR><TR><TD PORT="active" ALIGN="LEFT">active</TD><TD ALIGN="LEFT"> </TD></TR></TABLE>>];
+user_credentials [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>user_credentials</B></FONT></TD></TR><TR><TD PORT="userId" ALIGN="LEFT">userId</TD><TD ALIGN="LEFT">PK FK</TD></TR><TR><TD PORT="password_hash" ALIGN="LEFT">password_hash</TD><TD ALIGN="LEFT"> </TD></TR></TABLE>>];
+sessions [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>sessions</B></FONT></TD></TR><TR><TD PORT="token" ALIGN="LEFT">token</TD><TD ALIGN="LEFT">PK </TD></TR><TR><TD PORT="user_id" ALIGN="LEFT">user_id</TD><TD ALIGN="LEFT">FK</TD></TR><TR><TD PORT="expires" ALIGN="LEFT">expires</TD><TD ALIGN="LEFT"> </TD></TR></TABLE>>];
+projects [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>projects</B></FONT></TD></TR><TR><TD PORT="id" ALIGN="LEFT">id</TD><TD ALIGN="LEFT">PK </TD></TR><TR><TD PORT="masterId" ALIGN="LEFT">masterId</TD><TD ALIGN="LEFT">FK</TD></TR><TR><TD PORT="createdById" ALIGN="LEFT">createdById</TD><TD ALIGN="LEFT">FK</TD></TR><TR><TD PORT="departmentId" ALIGN="LEFT">departmentId</TD><TD ALIGN="LEFT">FK</TD></TR></TABLE>>];
+project_department_access [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>project_department_access</B></FONT></TD></TR><TR><TD PORT="projectId" ALIGN="LEFT">projectId</TD><TD ALIGN="LEFT">PK FK</TD></TR><TR><TD PORT="groupId" ALIGN="LEFT">groupId</TD><TD ALIGN="LEFT">PK FK</TD></TR></TABLE>>];
+audit_log [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>audit_log</B></FONT></TD></TR><TR><TD PORT="id" ALIGN="LEFT">id</TD><TD ALIGN="LEFT">PK </TD></TR><TR><TD PORT="projectId" ALIGN="LEFT">projectId</TD><TD ALIGN="LEFT">FK</TD></TR><TR><TD PORT="actorId" ALIGN="LEFT">actorId</TD><TD ALIGN="LEFT">FK</TD></TR><TR><TD PORT="actor" ALIGN="LEFT">actor</TD><TD ALIGN="LEFT"> </TD></TR><TR><TD PORT="role" ALIGN="LEFT">role</TD><TD ALIGN="LEFT"> </TD></TR><TR><TD PORT="action" ALIGN="LEFT">action</TD><TD ALIGN="LEFT"> </TD></TR><TR><TD PORT="at" ALIGN="LEFT">at</TD><TD ALIGN="LEFT"> </TD></TR></TABLE>>];
+users -> departments [label="departmentId\n0..* to 1"];
+users -> roles [label="role\n0..* to 1"];
+user_credentials -> users [label="userId\n0..1 to 1"];
+sessions -> users [label="user_id\n0..* to 1"];
+projects -> users [label="createdById\n0..* to 0..1"];
+projects -> departments [label="departmentId\n0..* to 1"];
+project_department_access -> departments [label="groupId\n0..* to 1"];
+project_department_access -> projects [label="projectId\n0..* to 1"];
+audit_log -> users [label="actorId\n0..* to 0..1"];
+audit_log -> projects [label="projectId\n0..* to 0..1"];
+}

@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {build} from 'esbuild';
+import {Miniflare} from 'miniflare';
+import {initializeLocalDatabase} from '../scripts/local-db.mjs';
+const mf=new Miniflare({scriptPath:'dist/worker.js',modules:true,compatibilityDate:'2026-05-22',d1Databases:['DB'],cf:false});await initializeLocalDatabase(mf);
+let cookie='',checks=0;
+const api=async(path,body,status=200)=>{const r=await mf.dispatchFetch('https://bia.test/api/'+path,{method:body?'POST':'GET',headers:{Cookie:cookie,Origin:'https://bia.test','Content-Type':'application/json','X-BIA-Request':'1'},body:body?JSON.stringify(body):undefined});if(r.headers.has('set-cookie'))cookie=r.headers.get('set-cookie').split(';')[0];assert.equal(r.status,status,await r.clone().text());return r.json()};
+await api('setup',{name:'Admin',email:'admin@test.example',password:'Test-password-12345'});
+let s=await api('state');await api('mutate',{action:'project',version:s.version,payload:{masterId:'bia-digital-transformation',title:'Baseline UI Project',department:'Digital & IT',owner:'Lead',budget:1000,start:'2026-01-01',due:'2080-12-31'}});
+s=await api('state');const project=s.projects.find(p=>p.title==='Baseline UI Project');await api('mutate',{action:'task',version:s.version,payload:{projectId:project.id,title:'Milestone UI Go Live',resource:'Unassigned',effort:10,start:'2080-02-01',due:'2080-02-10',predecessors:[],isMilestone:true}});
+s=await api('state');const first=s.tasks.find(t=>t.projectId===project.id);
+await api('mutate',{action:'task',version:s.version,payload:{projectId:project.id,title:'Following task',resource:'Unassigned',effort:10,start:'2080-02-11',due:'2080-02-12',predecessors:[first.id]}});
+const bundle=await build({entryPoints:['src/main.jsx'],bundle:true,format:'iife',write:false,loader:{'.css':'empty'},define:{'import.meta.env.VITE_EDITION':'"review"'}});
+const dom=new JSDOM('<div id="root"></div>',{url:'https://bia.test',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,doc=w.document,errors=[];
+w.addEventListener('error',e=>errors.push(e.message));w.fetch=async(path,options={})=>{const r=await mf.dispatchFetch(new URL(path,'https://bia.test'),{...options,headers:{...options.headers,Origin:'https://bia.test',Cookie:cookie}});if(r.headers.has('set-cookie'))cookie=r.headers.get('set-cookie').split(';')[0];return r};
+const wait=async fn=>{for(let i=0;i<400;i++){if(fn())return;await new Promise(r=>setTimeout(r,10))}throw Error(doc.body.textContent.slice(-3000))};
+const top=()=>[...doc.querySelectorAll('[role=dialog]')].at(-1);
+const click=(text,scope=doc)=>{const b=[...scope.querySelectorAll('button')].find(b=>b.textContent.trim()===text);assert(b,text);b.click()};
+const set=(el,value)=>{const proto=el.tagName==='SELECT'?w.HTMLSelectElement.prototype:el.tagName==='TEXTAREA'?w.HTMLTextAreaElement.prototype:w.HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new w.Event('input',{bubbles:true}));el.dispatchEvent(new w.Event('change',{bubbles:true}))};
+const fill=(name,value)=>set(top().querySelector(`[name="${name}"]`),value);
+const submit=()=>top().querySelector('form').dispatchEvent(new w.SubmitEvent('submit',{bubbles:true,cancelable:true}));
+try{
+ w.eval(bundle.outputFiles[0].text);await wait(()=>doc.querySelector('.project-row'));
+ [...doc.querySelectorAll('.project-row')].find(b=>b.textContent.includes(project.title)).click();await wait(()=>top()?.querySelector('.baseline-panel'));
+ assert(top().textContent.includes('This project is not baselined.'));assert(doc.querySelector('.portfolio-notices').textContent.includes('not baselined'));checks++;
+ click('◆ Milestone UI Go Live',top());await wait(()=>top()?.querySelector('[name=due]'));const oldDue=top().querySelector('[name=due]').value;fill('due','2080-02-20');submit();await wait(()=>top()?.textContent.includes('Confirm task date change'));s=await api('state');assert.equal(s.tasks.find(t=>t.id===first.id).due,oldDue);click('Cancel — restore old dates',top());await wait(()=>top()?.querySelector('[name=due]'));assert.equal(top().querySelector('[name=due]').value,oldDue);checks++;
+ fill('due','2080-02-20');submit();await wait(()=>top()?.textContent.includes('Confirm task date change'));click('Confirm date change',top());await wait(()=>top()?.querySelector('.baseline-panel'));s=await api('state');assert.equal(s.tasks.find(t=>t.id===first.id).due,'2080-02-20');assert(s.tasks.find(t=>t.title==='Following task').start>'2080-02-20');checks++;
+ click('Edit working week',top());await wait(()=>top()?.querySelector('[name=off5]'));top().querySelector('[name=off5]').click();top().querySelector('[name=off6]').click();fill('reason','Friday and Saturday off');submit();await wait(()=>top()?.querySelector('.baseline-panel'));assert(top().textContent.includes('Friday, Saturday'));checks++;
+ const row=[...top().querySelectorAll('tr')].find(r=>r.textContent.includes('Milestone UI Go Live'));click('Update',row);await wait(()=>top()?.querySelector('[name=progress]'));fill('progress','100');fill('note','Finished ahead');submit();await wait(()=>top()?.textContent.includes('Task completed ahead of plan'));checks++;
+ click('Back',top());await wait(()=>top()?.querySelector('[name=progress]'));s=await api('state');assert.equal(s.tasks.find(t=>t.id===first.id).progress,0);checks++;
+ fill('progress','100');fill('note','Confirm completion');submit();await wait(()=>top()?.textContent.includes('Task completed ahead of plan'));click('Complete and reschedule',top());await wait(()=>top()?.querySelector('.baseline-panel'));s=await api('state');assert.equal(s.tasks.find(t=>t.id===first.id).progress,100);assert(s.tasks.find(t=>t.title==='Following task').start<'2080-02-11');checks++;
+ const nextRow=[...top().querySelectorAll('tr')].find(r=>r.textContent.includes('Following task'));click('Update',nextRow);await wait(()=>top()?.querySelector('[name=progress]'));fill('progress','100');fill('note','Project completed ahead');submit();await wait(()=>top()?.querySelector('.baseline-panel'));assert(top().textContent.includes('days early'));assert(doc.querySelector('.portfolio-notices').textContent.includes('completed ahead of plan'));checks++;
+ top().querySelector('[aria-label="Close dialog"]').click();click('Management dashboard');await wait(()=>doc.querySelector('.management-dashboard'));assert(doc.querySelector('.management-stats').textContent.includes('1 completed early'));checks++;
+ assert.deepEqual(errors,[]);console.log(checks+' scheduling UI checks passed: calendar, early popup, back without saving, confirmed cascade.');
+}finally{dom.window.close();await mf.dispose()}

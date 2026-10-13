@@ -1,0 +1,32 @@
+import {initializeLocalDatabase} from '../scripts/local-db.mjs';
+import {strict as assert} from 'node:assert';
+import {Miniflare} from 'miniflare';
+const mf=new Miniflare({scriptPath:'dist/worker.js',modules:true,compatibilityDate:'2026-05-22',d1Databases:['DB'],cf:false});
+await initializeLocalDatabase(mf);
+const fetch=(...args)=>mf.dispatchFetch(...args);
+const url=process.env.TEST_BASE_URL||'http://127.0.0.1:8787';let count=0;
+function client(){let cookie='';return async(path,body,expected=200)=>{const r=await fetch(url+'/api/'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-BIA-Request':'1',Origin:url,...(cookie?{Cookie:cookie}:{})},body:body?JSON.stringify(body):undefined});const text=await r.text();assert.equal(r.status,expected,path+': '+text);if(r.headers.get('set-cookie'))cookie=r.headers.get('set-cookie').split(';')[0];count++;return JSON.parse(text)}}
+const admin=client(),other=client(),head=client(),exec=client();
+let s=await admin('state');if(s.setupRequired)await admin('setup',{name:'Test Admin',email:'admin@example.test',password:'Local-test-password-239!'});else await admin('login',{email:'admin@example.test',password:'Local-test-password-239!'});
+s=await admin('state');assert(s.user.role==='admin');assert(!JSON.stringify(s).includes('hash'));
+const suffix=Date.now();
+await admin('users',{name:'Test Delegate',email:`delegate${suffix}@example.test`,password:'Local-test-password-239!',role:'delegate',department:'HR'});
+await admin('users',{name:'Test Head',email:`head${suffix}@example.test`,password:'Local-test-password-239!',role:'head',department:'HR'});
+await admin('users',{name:'Test Executive',email:`executive${suffix}@example.test`,password:'Local-test-password-239!',role:'executive',department:'HR'});
+await other('login',{email:`delegate${suffix}@example.test`,password:'Local-test-password-239!'});await head('login',{email:`head${suffix}@example.test`,password:'Local-test-password-239!'});await exec('login',{email:`executive${suffix}@example.test`,password:'Local-test-password-239!'});
+s=await admin('state');const user=s.users.find(u=>u.email===`delegate${suffix}@example.test`),task=s.tasks.find(t=>t.id==='wf2');
+await head('mutate',{action:'task',version:s.version,payload:{...task,assigneeId:user.id}});
+s=await other('state');await other('mutate',{action:'update',version:s.version,payload:{taskId:'wf2',progress:75,blocked:false,note:'Multi-user integration test'}});
+await admin('mutate',{action:'update',version:s.version,payload:{taskId:'wf2',progress:80,blocked:false,note:'Stale update'}},409);
+s=await admin('state');assert.equal(s.tasks.find(t=>t.id==='wf2').progress,75);
+await exec('mutate',{action:'update',version:s.version,payload:{taskId:'wf2',progress:80,blocked:false,note:'Unauthorized'}},403);
+await head('users',{name:'Escalation',email:`escalate${suffix}@example.test`,password:'Local-test-password-239!',role:'admin',department:'HR'},403);
+await other('mutate',{action:'update',version:s.version,payload:{taskId:'qa2',progress:50,blocked:false,note:'Wrong assignment'}},403);
+await admin('users/active',{id:user.id,active:false});await other('mutate',{action:'update',version:s.version,payload:{taskId:'wf2',progress:80,blocked:false,note:'Revoked'}},401);
+s=await admin('state');await admin('mutate',{action:'invoice',version:s.version,payload:{poId:'po1',number:'OVER-'+suffix,amount:99999999,date:'2026-09-29',due:'2026-10-01'}},422);
+const cross=await fetch(url+'/api/mutate',{method:'POST',headers:{Origin:'https://evil.example','Content-Type':'application/json','X-BIA-Request':'1'},body:'{}'});assert.equal(cross.status,403);count++;
+const secret=await client()('state');assert.equal(secret.demo,true);assert.deepEqual(Object.keys(secret).sort(),['demo','setupRequired','user']);
+await admin('logout',{});await admin('mutate',{action:'project',version:s.version,payload:{}},401);
+console.log(`${count} API checks passed: real sessions, shared persistence, role scopes, delegation, revocation, stale writes, finance validation and CSRF.`);
+
+await mf.dispose();

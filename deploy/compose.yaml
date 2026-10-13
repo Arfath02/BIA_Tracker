@@ -1,0 +1,36 @@
+name: bia-transformation
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    env_file: .env
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [bia_app]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports: ["${BIND_IP:-127.0.0.1}:${APP_PORT:-8443}:8443"]
+    volumes: ["${TLS_DIRECTORY:?Set TLS_DIRECTORY}:/etc/bia-tls:ro"]
+    networks: [bia_app]
+    depends_on:
+      api:
+        condition: service_healthy
+networks:
+  bia_app:
+    driver: bridge

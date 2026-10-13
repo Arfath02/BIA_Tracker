@@ -1,0 +1,8 @@
+digraph BIA {
+graph [rankdir=TB, bgcolor="white", pad="0.3", nodesep="0.7", ranksep="0.9", splines=polyline];
+node [shape=plain, fontname="Arial"];
+edge [fontname="Arial", fontsize=11, color="#6c7a89", arrowsize=0.8];
+workspace [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>workspace</B></FONT></TD></TR><TR><TD PORT="id" ALIGN="LEFT">id</TD><TD ALIGN="LEFT">PK </TD></TR><TR><TD PORT="version" ALIGN="LEFT">version</TD><TD ALIGN="LEFT"> </TD></TR></TABLE>>];
+schema_migrations [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>schema_migrations</B></FONT></TD></TR><TR><TD PORT="version" ALIGN="LEFT">version</TD><TD ALIGN="LEFT">PK </TD></TR><TR><TD PORT="appliedAt" ALIGN="LEFT">appliedAt</TD><TD ALIGN="LEFT"> </TD></TR></TABLE>>];
+login_attempts [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#15354b"><FONT COLOR="white"><B>login_attempts</B></FONT></TD></TR><TR><TD PORT="key" ALIGN="LEFT">key</TD><TD ALIGN="LEFT">PK </TD></TR><TR><TD PORT="count" ALIGN="LEFT">count</TD><TD ALIGN="LEFT"> </TD></TR><TR><TD PORT="expires" ALIGN="LEFT">expires</TD><TD ALIGN="LEFT"> </TD></TR></TABLE>>];
+}

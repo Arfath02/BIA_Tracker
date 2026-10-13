@@ -1,0 +1,524 @@
+{
+  "projects": [
+    {
+      "id": "erp",
+      "title": "StellarKnit ERP",
+      "department": "Digital & IT",
+      "owner": "ERP workstream lead",
+      "budget": 480000,
+      "start": "2026-08-01",
+      "due": "2026-10-30",
+      "description": "Unify planning, production, inventory and finance on a single operational backbone.",
+      "color": "#b31c3f"
+    },
+    {
+      "id": "asrs",
+      "title": "ASRS & warehouse automation",
+      "department": "Warehouse",
+      "owner": "Warehouse vertical head",
+      "budget": 1800000,
+      "start": "2026-08-01",
+      "due": "2026-12-18",
+      "description": "Connect warehouse storage, pallet movement and ERP stock visibility.",
+      "color": "#386c77"
+    },
+    {
+      "id": "workforce",
+      "title": "Workforce visibility",
+      "department": "HR",
+      "owner": "HR vertical head",
+      "budget": 35000,
+      "start": "2026-09-01",
+      "due": "2026-11-13",
+      "description": "Validate floor and zone visibility in a controlled workforce pilot.",
+      "color": "#ac783d"
+    },
+    {
+      "id": "quality",
+      "title": "Connected quality",
+      "department": "Quality",
+      "owner": "Quality vertical head",
+      "budget": 150000,
+      "start": "2026-09-01",
+      "due": "2026-11-27",
+      "description": "Link inspection, laboratory results and corrective actions to production.",
+      "color": "#6665a8"
+    },
+    {
+      "id": "dyehouse",
+      "title": "Dyehouse trolley traceability",
+      "department": "Production",
+      "owner": "Production vertical head",
+      "budget": 85000,
+      "start": "2026-09-01",
+      "due": "2026-11-20",
+      "description": "Track trolley handovers from batching through dyeing and inspection.",
+      "color": "#537861"
+    },
+    {
+      "id": "infra",
+      "title": "Secure digital infrastructure",
+      "department": "Engineering",
+      "owner": "Infrastructure lead",
+      "budget": 120000,
+      "start": "2026-08-01",
+      "due": "2026-10-30",
+      "description": "Build reliable identity, backups, network segmentation and application hosting.",
+      "color": "#4e6f9d"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "erp1",
+      "projectId": "erp",
+      "title": "Confirm master data & configurations",
+      "start": "2026-08-01",
+      "due": "2026-09-04",
+      "progress": 100,
+      "effort": 80,
+      "predecessors": [],
+      "blocked": false,
+      "parentId": null,
+      "department": "Digital & IT",
+      "resource": "ERP workstream lead",
+      "assigneeId": null
+    },
+    {
+      "id": "erp2",
+      "projectId": "erp",
+      "title": "Business acceptance testing",
+      "start": "2026-09-07",
+      "due": "2026-10-02",
+      "progress": 0,
+      "effort": 80,
+      "predecessors": [],
+      "blocked": false,
+      "parentId": null,
+      "department": "Digital & IT",
+      "resource": "ERP workstream lead",
+      "assigneeId": null
+    },
+    {
+      "id": "erp21",
+      "projectId": "erp",
+      "title": "Validate production & inventory flows",
+      "start": "2026-09-07",
+      "due": "2026-09-25",
+      "progress": 85,
+      "effort": 50,
+      "predecessors": [
+        "erp1"
+      ],
+      "blocked": true,
+      "parentId": "erp2",
+      "department": "Digital & IT",
+      "resource": "ERP workstream lead",
+      "assigneeId": null
+    },
+    {
+      "id": "erp22",
+      "projectId": "erp",
+      "title": "Validate finance reconciliation",
+      "start": "2026-09-07",
+      "due": "2026-10-02",
+      "progress": 70,
+      "effort": 30,
+      "predecessors": [
+        "erp1"
+      ],
+      "blocked": false,
+      "parentId": "erp2",
+      "department": "Digital & IT",
+      "resource": "ERP workstream lead",
+      "assigneeId": null
+    },
+    {
+      "id": "erp3",
+      "projectId": "erp",
+      "title": "Cutover rehearsal & sign-off",
+      "start": "2026-10-05",
+      "due": "2026-10-30",
+      "progress": 0,
+      "effort": 40,
+      "predecessors": [
+        "erp2"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "Digital & IT",
+      "resource": "ERP workstream lead",
+      "assigneeId": null
+    },
+    {
+      "id": "asrs1",
+      "projectId": "asrs",
+      "title": "Layout and interface specification",
+      "start": "2026-08-01",
+      "due": "2026-09-18",
+      "progress": 100,
+      "effort": 60,
+      "predecessors": [],
+      "blocked": false,
+      "parentId": null,
+      "department": "Warehouse",
+      "resource": "Warehouse vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "asrs2",
+      "projectId": "asrs",
+      "title": "Vendor design approval",
+      "start": "2026-09-21",
+      "due": "2026-10-09",
+      "progress": 55,
+      "effort": 80,
+      "predecessors": [
+        "asrs1"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "Warehouse",
+      "resource": "Warehouse vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "asrs3",
+      "projectId": "asrs",
+      "title": "WMS / WCS integration and FAT",
+      "start": "2026-10-12",
+      "due": "2026-12-18",
+      "progress": 0,
+      "effort": 100,
+      "predecessors": [
+        "asrs2"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "Warehouse",
+      "resource": "Warehouse vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "wf1",
+      "projectId": "workforce",
+      "title": "Define zones and pilot measures",
+      "start": "2026-09-01",
+      "due": "2026-09-11",
+      "progress": 100,
+      "effort": 20,
+      "predecessors": [],
+      "blocked": false,
+      "parentId": null,
+      "department": "HR",
+      "resource": "HR vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "wf2",
+      "projectId": "workforce",
+      "title": "Install gateways and enroll pilot tags",
+      "start": "2026-09-14",
+      "due": "2026-10-09",
+      "progress": 65,
+      "effort": 35,
+      "predecessors": [
+        "wf1"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "HR",
+      "resource": "HR vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "wf3",
+      "projectId": "workforce",
+      "title": "Evaluate pilot and scale decision",
+      "start": "2026-10-12",
+      "due": "2026-11-13",
+      "progress": 0,
+      "effort": 25,
+      "predecessors": [
+        "wf2"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "HR",
+      "resource": "HR vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "qa1",
+      "projectId": "quality",
+      "title": "Approve quality data model",
+      "start": "2026-09-01",
+      "due": "2026-09-18",
+      "progress": 100,
+      "effort": 35,
+      "predecessors": [],
+      "blocked": false,
+      "parentId": null,
+      "department": "Quality",
+      "resource": "Quality vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "qa2",
+      "projectId": "quality",
+      "title": "Integrate inspection results",
+      "start": "2026-09-21",
+      "due": "2026-10-30",
+      "progress": 25,
+      "effort": 50,
+      "predecessors": [
+        "qa1"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "Quality",
+      "resource": "Quality vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "qa3",
+      "projectId": "quality",
+      "title": "Run acceptance and traceability tests",
+      "start": "2026-11-02",
+      "due": "2026-11-27",
+      "progress": 0,
+      "effort": 25,
+      "predecessors": [
+        "qa2"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "Quality",
+      "resource": "Quality vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "dy1",
+      "projectId": "dyehouse",
+      "title": "Map trolley handovers and scan points",
+      "start": "2026-09-01",
+      "due": "2026-09-18",
+      "progress": 100,
+      "effort": 30,
+      "predecessors": [],
+      "blocked": false,
+      "parentId": null,
+      "department": "Production",
+      "resource": "Production vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "dy2",
+      "projectId": "dyehouse",
+      "title": "Trial scan-to-move workflow",
+      "start": "2026-09-21",
+      "due": "2026-10-16",
+      "progress": 40,
+      "effort": 45,
+      "predecessors": [
+        "dy1"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "Production",
+      "resource": "Production vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "dy3",
+      "projectId": "dyehouse",
+      "title": "Operational validation and rollout",
+      "start": "2026-10-19",
+      "due": "2026-11-20",
+      "progress": 0,
+      "effort": 25,
+      "predecessors": [
+        "dy2"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "Production",
+      "resource": "Production vertical head",
+      "assigneeId": null
+    },
+    {
+      "id": "in1",
+      "projectId": "infra",
+      "title": "Network segmentation and identity",
+      "start": "2026-08-01",
+      "due": "2026-09-11",
+      "progress": 100,
+      "effort": 40,
+      "predecessors": [],
+      "blocked": false,
+      "parentId": null,
+      "department": "Engineering",
+      "resource": "Infrastructure lead",
+      "assigneeId": null
+    },
+    {
+      "id": "in2",
+      "projectId": "infra",
+      "title": "Backup and restore validation",
+      "start": "2026-09-14",
+      "due": "2026-09-25",
+      "progress": 70,
+      "effort": 35,
+      "predecessors": [
+        "in1"
+      ],
+      "blocked": true,
+      "parentId": null,
+      "department": "Engineering",
+      "resource": "Infrastructure lead",
+      "assigneeId": null
+    },
+    {
+      "id": "in3",
+      "projectId": "infra",
+      "title": "Application hardening & handover",
+      "start": "2026-09-28",
+      "due": "2026-10-30",
+      "progress": 0,
+      "effort": 25,
+      "predecessors": [
+        "in2"
+      ],
+      "blocked": false,
+      "parentId": null,
+      "department": "Engineering",
+      "resource": "Infrastructure lead",
+      "assigneeId": null
+    }
+  ],
+  "pos": [
+    {
+      "id": "po1",
+      "projectId": "erp",
+      "number": "DEMO-PO-001",
+      "vendor": "ERP implementation partner",
+      "amount": 320000,
+      "date": "2026-08-03",
+      "description": "Implementation and integration milestones"
+    },
+    {
+      "id": "po2",
+      "projectId": "asrs",
+      "number": "DEMO-PO-002",
+      "vendor": "Warehouse automation partner",
+      "amount": 980000,
+      "date": "2026-08-10",
+      "description": "Design, equipment and controls"
+    },
+    {
+      "id": "po3",
+      "projectId": "infra",
+      "number": "DEMO-PO-003",
+      "vendor": "Infrastructure partner",
+      "amount": 78000,
+      "date": "2026-08-17",
+      "description": "Compute, network and backup infrastructure"
+    },
+    {
+      "id": "po4",
+      "projectId": "workforce",
+      "number": "DEMO-PO-004",
+      "vendor": "Pilot device partner",
+      "amount": 18000,
+      "date": "2026-09-03",
+      "description": "Gateway and tag pilot kit"
+    }
+  ],
+  "invoices": [
+    {
+      "id": "inv1",
+      "poId": "po1",
+      "number": "DEMO-INV-001",
+      "amount": 160000,
+      "date": "2026-08-17",
+      "due": "2026-09-16",
+      "status": "Paid",
+      "reference": "DEMO-PAY-001",
+      "paidDate": "2026-09-15"
+    },
+    {
+      "id": "inv2",
+      "poId": "po1",
+      "number": "DEMO-INV-002",
+      "amount": 80000,
+      "date": "2026-09-21",
+      "due": "2026-10-21",
+      "status": "Unpaid"
+    },
+    {
+      "id": "inv3",
+      "poId": "po2",
+      "number": "DEMO-INV-003",
+      "amount": 294000,
+      "date": "2026-08-24",
+      "due": "2026-09-23",
+      "status": "Unpaid"
+    },
+    {
+      "id": "inv4",
+      "poId": "po3",
+      "number": "DEMO-INV-004",
+      "amount": 39000,
+      "date": "2026-08-20",
+      "due": "2026-09-19",
+      "status": "Paid",
+      "reference": "DEMO-PAY-002",
+      "paidDate": "2026-09-18"
+    },
+    {
+      "id": "inv5",
+      "poId": "po4",
+      "number": "DEMO-INV-005",
+      "amount": 18000,
+      "date": "2026-09-10",
+      "due": "2026-10-10",
+      "status": "Unpaid"
+    }
+  ],
+  "users": [],
+  "version": 1,
+  "updates": [
+    {
+      "id": "u1",
+      "taskId": "erp21",
+      "progress": 85,
+      "note": "Sample: inventory reconciliation needs joint sign-off before the cutover rehearsal.",
+      "author": "ERP workstream lead",
+      "createdAt": "2026-09-28T12:30:00Z"
+    },
+    {
+      "id": "u2",
+      "taskId": "in2",
+      "progress": 70,
+      "note": "Sample: restore test evidence is pending for the secondary backup copy.",
+      "author": "Infrastructure lead",
+      "createdAt": "2026-09-28T09:15:00Z"
+    },
+    {
+      "id": "u3",
+      "taskId": "asrs2",
+      "progress": 55,
+      "note": "Sample: interface drawings are under review with the warehouse team.",
+      "author": "Warehouse vertical head",
+      "createdAt": "2026-09-27T13:00:00Z"
+    }
+  ],
+  "audit": [
+    {
+      "id": "a1",
+      "actor": "BIA review workspace",
+      "role": "system",
+      "action": "Illustrative portfolio created for review",
+      "at": "2026-09-29T07:00:00Z"
+    }
+  ]
+}
