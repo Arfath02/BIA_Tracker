@@ -74,21 +74,6 @@ git clone https://github.com/<your-org>/bia-tracker.git
 cd bia-tracker
 ```
 
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env`:
-```bash
-cp .env.example .env
-chmod 600 .env
-```
-
-Review or edit `.env` with your desired configuration:
-```ini
-# SQL Server Configuration
-MSSQL_PASSWORD=YourStrongSA_Password123!
-MSSQL_DATABASE=BIA_Transformation
-MSSQL_USERNAME=sa
-MSSQL_HOST_PORT=1433
-MSSQL_DRIVER=ODBC Driver 18 for SQL Server
 
 # Application Web Port (Port 5050 to avoid Jenkins/8080 conflicts)
 APP_PORT=5050
@@ -120,10 +105,7 @@ sudo docker compose run --rm api python -m production.manage upgrade
 ```bash
 sudo docker compose run --rm api python -m production.manage create-admin
 ```
-Follow the interactive prompts to enter:
-* Administrator Name (e.g., `Arfath Khan`)
-* Administrator Email (e.g., `arfath.khan@biatextiles.co`)
-* Password (12+ characters)
+
 
 ### 6. Open the Application
 Navigate in your browser to:
