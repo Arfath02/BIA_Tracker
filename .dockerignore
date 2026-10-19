@@ -1,6 +1,7 @@
 .git
 node_modules
-dist
+dist/*
+!dist/client
 .wrangler
 .env
 deploy/.env

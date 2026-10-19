@@ -17,7 +17,10 @@
     "test:access": "node tests/access-api.mjs",
     "test:management": "node tests/management-api.mjs",
     "test:auth-ui": "node tests/auth-ui.mjs",
-    "test:baseline-ui": "node tests/baseline-ui.mjs"
+    "test:baseline-ui": "node tests/baseline-ui.mjs",
+    "test:commercial-ui": "node tests/commercial-ui.mjs",
+    "test:budget-gantt-ui": "node tests/budget-gantt-ui.mjs",
+    "test:integration": "node scripts/test-integration.mjs"
   },
   "dependencies": {
     "react": "19.2.6",

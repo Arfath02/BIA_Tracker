@@ -1,3 +1,23 @@
+# API repair release — 18 October 2026
+
+Start with [RELEASE_GUIDE.md](RELEASE_GUIDE.md) for this complete package, the corrected Python API, SQL v12 install/upgrade paths, and deployment verification. Rebuild both application images; replacing frontend files alone does not update the API.
+
+# Dashboard controls, exports and Finance approval inbox
+
+See [usage and access controls](docs/CONTROLS_EXPORTS_APPROVALS.md). SQL schema remains v12; deploy the updated frontend and API together.
+
+# Current release: budget change approval and portfolio Gantt (schema v12)
+
+Read [docs/BUDGET_CHANGES_GANTT.md](docs/BUDGET_CHANGES_GANTT.md). For v11 use `08_upgrade_v11_to_v12.sql`; older databases use `deploy/migrate.py`. Reapply runtime permissions. Historical notes follow.
+
+# Current release: consultant fixes and JOD expenses (schema v11)
+
+Read [docs/EXPENSES.md](docs/EXPENSES.md). For v10 use `07_upgrade_v10_to_v11.sql`; for older databases use `deploy/migrate.py`. Reapply runtime permissions. Historical release notes follow.
+
+# Latest release: currencies, payment conditions and consultant travel (schema v10)
+
+Read [docs/COMMERCIAL.md](docs/COMMERCIAL.md) first. Use the current v10 SQL scripts and updated API container. Existing v9 systems use 06_upgrade_v9_to_v10.sql or deploy/migrate.py; reapply runtime permissions. Older release notes follow.
+
 # Latest release: automatic scheduling (schema v9)
 
 Read [docs/SCHEDULING.md](docs/SCHEDULING.md) for calendars, successor scheduling and the preserving SQL upgrade. Use the current schema v9 scripts; the older release notes below are historical.

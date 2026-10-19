@@ -1,3 +1,4 @@
+from .commercial import with_finance,ACTIONS,mutate_commercial,project_commercial,amount_in,invoice_term,invoice_change
 from .scheduling import calendar,normalize_task,reschedule,schedule_audit,effective_finish
 from .access import with_access,can_see,project_for_action
 """Validated application commands shared by every Python API write path."""
@@ -47,9 +48,11 @@ def progress(s,parent):
 
 def mutate(state,user,action,b):
     authorize(user['role']!='management')
-    s=with_access(deepcopy(state));s['catalogs']=catalog_rows(s);uid=str(uuid4());label='';audit_project=project_for_action(s,action,b);audit_project_id=audit_project['id'] if audit_project else None
-    if action in ['task','update','po','invoice','payment','project_access','baseline','project_dates','project_calendar']: authorize(can_see(s,user,audit_project))
-    if action=='baseline':
+    s=with_finance(with_access(deepcopy(state)));s['catalogs']=catalog_rows(s);uid=str(uuid4());label='';audit_project=project_for_action(s,action,b);audit_project_id=audit_project['id'] if audit_project else None
+    if action in ['task','update','po','invoice','payment','project_access','baseline','project_dates','project_calendar']+[a for a in ACTIONS if a!='consultant']: authorize(action=='change_decision' and user['role']=='finance' or can_see(s,user,audit_project))
+    if action in ACTIONS:
+        s,label=mutate_commercial(s,user,action,b,uid,today())
+    elif action=='baseline':
         p=audit_project;authorize(p and can_plan(user,p['department']))
         tasks=[t for t in s['tasks'] if t['projectId']==p['id']]
         if not tasks: reject('Add a task plan before saving a baseline.')
@@ -112,7 +115,7 @@ def mutate(state,user,action,b):
         if any(x['id']!=u['id'] and x['email'].lower()==u['email'] for x in s['users']): reject('An account with this email already exists.')
         if u['id']==user['id'] and (not u['active'] or u['role']!='admin'): reject('You cannot disable or demote your own administrator account.')
         if old['active'] and old['role']=='admin' and (not u['active'] or u['role']!='admin') and not any(x['id']!=u['id'] and x['active'] and x['role']=='admin' for x in s['users']): reject('Keep at least one active administrator.')
-        if u['active'] and any(t['assigneeId']==u['id'] and t['progress']<100 and u['role']!='admin' and (u['role'] not in ['head','delegate'] or u['department']!=t['department']) for t in s['tasks']): reject('Reassign this account’s open tasks before changing its role or department.')
+        if u['active'] and any(t['assigneeId']==u['id'] and t['progress']<100 and u['role'] not in ['admin','head','delegate'] for t in s['tasks']): reject('Reassign this account’s open tasks before changing its role.')
         s['users']=[u if x['id']==u['id'] else x for x in s['users']];label='Updated account · '+u['name']+' · '+u['role']+' · '+('active' if u['active'] else 'disabled')
     elif action=='project':
         authorize(user['role']=='admin' or user['role']=='head' and user['department']==b.get('department'))
@@ -120,6 +123,7 @@ def mutate(state,user,action,b):
         if not any(m['id']==p['masterId'] for m in s['masterProjects']): reject('Select a valid master project.')
         if not allowed(s,'department',p['department']): reject('Select a valid department.')
         if p['due']<p['start']: reject('Due date must follow the start date.')
+        p.update(project_commercial(s,b,p,today()));p['budget']=amount_in(p['budget'],p,'Budget')
         s['projects'].append(p);audit_project_id=p['id'];label='Created subproject · '+p['title']
     elif action=='task':
         p=next((p for p in s['projects'] if p['id']==b.get('projectId')),None)
@@ -132,7 +136,8 @@ def mutate(state,user,action,b):
         if not isinstance(preds,list) or any(not isinstance(x,str) for x in preds): reject('Invalid predecessors.')
         hidden_preds=[pred for pred in old['predecessors'] if not can_see(s,user,project_for_action(s,'update',{'taskId':pred}))] if old else []
         preds=list(dict.fromkeys(preds+hidden_preds))
-        t=dict(id=old['id'] if old else uid,projectId=p['id'],title=text(b.get('title'),'Task title'),department=p['department'],parentId=b.get('parentId') or None,predecessors=list(dict.fromkeys(preds)),assigneeId=b.get('assigneeId') or None,resource=text(b.get('resource') or 'Unassigned','Resource',80),effort=number(b.get('effort'),'Planned hours',1,100000),start=valid_date(b.get('start'),'Start'),due=valid_date(b.get('due'),'Due'),progress=old['progress'] if old else 0,blocked=old['blocked'] if old else False,isMilestone=b.get('isMilestone',bool(old.get('isMilestone')) if old else False))
+        t=dict(id=old['id'] if old else uid,projectId=p['id'],title=text(b.get('title'),'Task title'),department=p['department'],parentId=b.get('parentId') or None,predecessors=list(dict.fromkeys(preds)),assigneeId=b.get('assigneeId') or None,resource=text(b.get('resource') or (old['resource'] if old else 'Unassigned'),'Resource',80),effort=number(b.get('effort'),'Planned hours',1,100000),start=valid_date(b.get('start'),'Start'),due=valid_date(b.get('due'),'Due'),progress=old['progress'] if old else 0,blocked=old['blocked'] if old else False,isMilestone=b.get('isMilestone',bool(old.get('isMilestone')) if old else False))
+        if old and old.get('isMilestone') and not t['isMilestone'] and any(x.get('milestoneId')==t['id'] and not x['cancelled'] for x in s['paymentTerms']): reject('This milestone is used by a payment condition.')
         if type(t['isMilestone']) is not bool: reject('Milestone must be true or false.')
         if not old or old['start']!=t['start'] or old['due']!=t['due']: normalize_task(t,p)
         date_changed=old and (old['start']!=t['start'] or old['due']!=t['due'])
@@ -142,7 +147,7 @@ def mutate(state,user,action,b):
         parent=next((x for x in s['tasks'] if x['id']==t['parentId']),None)
         if t['parentId'] and (not parent or parent['projectId']!=p['id'] or parent['id']==t['id']): reject('Select a valid parent task.')
         if parent and (parent['progress']>0 or parent['predecessors']): reject('Add subtasks only to a parent with no progress or predecessors.')
-        if t['assigneeId'] and not any(u['id']==t['assigneeId'] and u['active'] and u['role'] in ['admin','head','delegate'] and (u['role']=='admin' or u['department']==t['department']) for u in s['users']): reject('Select an active resource in this department.')
+        if t['assigneeId'] and not any(u['id']==t['assigneeId'] and u['active'] and u['role'] in ['admin','head','delegate'] for u in s['users']): reject('Select an active account.')
         for pred in t['predecessors']:
             pt=next((x for x in s['tasks'] if x['id']==pred),None)
             if not pt or pred==t['id']: reject('Invalid predecessor.')
@@ -183,7 +188,7 @@ def mutate(state,user,action,b):
     elif action=='po':
         authorize(user['role'] in ['admin','finance']);p=next((p for p in s['projects'] if p['id']==b.get('projectId')),None)
         if not p: reject('Select a valid subproject.')
-        po=dict(id=uid,projectId=p['id'],number=text(b.get('number'),'PO number',60),vendor=text(b.get('vendor'),'Vendor',100),amount=amount(b.get('amount'),'PO amount'),date=valid_date(b.get('date'),'PO date'),description=text(b.get('description'),'Description',300))
+        po=dict(id=uid,projectId=p['id'],number=text(b.get('number'),'PO number',60),vendor=text(b.get('vendor'),'Vendor',100),amount=amount_in(b.get('amount'),p,'PO amount',.0001),date=valid_date(b.get('date'),'PO date'),description=text(b.get('description'),'Description',300))
         if not allowed(s,'vendor',po['vendor']): reject('Select an active vendor.')
         if any(x['number'].lower()==po['number'].lower() for x in s['pos']): reject('This PO number already exists.')
         if sum(Decimal(str(x['amount'])) for x in s['pos'] if x['projectId']==p['id'])+Decimal(str(po['amount']))>Decimal(str(p['budget'])): reject('This PO exceeds the available project budget.')
@@ -191,11 +196,11 @@ def mutate(state,user,action,b):
     elif action=='invoice':
         authorize(user['role'] in ['admin','finance']);po=next((p for p in s['pos'] if p['id']==b.get('poId')),None)
         if not po: reject('Select a valid purchase order.')
-        i=dict(id=uid,poId=po['id'],number=text(b.get('number'),'Invoice number',60),amount=amount(b.get('amount'),'Invoice amount'),date=valid_date(b.get('date'),'Invoice date'),due=valid_date(b.get('due'),'Due date'),status='Unpaid')
+        i=dict(id=uid,poId=po['id'],number=text(b.get('number'),'Invoice number',60),amount=amount_in(b.get('amount'),next(p for p in s['projects'] if p['id']==po['projectId']),'Invoice amount',.0001),date=valid_date(b.get('date'),'Invoice date'),due=valid_date(b.get('due'),'Due date'),status='Unpaid')
         if i['due']<i['date'] or i['date']<po['date']: reject('Check invoice and payment dates against the PO date.')
         if any(x['poId']==po['id'] and x['number'].lower()==i['number'].lower() for x in s['invoices']): reject('Invoice number already exists for this PO.')
         if sum(Decimal(str(x['amount'])) for x in s['invoices'] if x['poId']==po['id'])+Decimal(str(i['amount']))>Decimal(str(po['amount'])): reject('Total invoices cannot exceed the purchase order amount.')
-        s['invoices'].append(i);label='Recorded invoice · '+i['number']
+        i['changeRequestId']=invoice_change(s,b,po,i['amount']);i['termId']=invoice_term(s,b,po,i['amount']);s['invoices'].append(i);label='Recorded invoice · '+i['number']
     elif action=='payment':
         authorize(user['role'] in ['admin','finance']);i=next((x for x in s['invoices'] if x['id']==b.get('invoiceId')),None)
         if not i: reject('Invoice not found.')

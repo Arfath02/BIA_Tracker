@@ -9,7 +9,7 @@ services:
       - MSSQL_SA_PASSWORD=${MSSQL_PASSWORD}
       - MSSQL_PID=Developer
     ports:
-      - "${MSSQL_HOST_PORT:-1433}:1433"
+      - "${MSSQL_HOST_PORT:-14333}:1433"
     volumes:
       - mssql_data:/var/opt/mssql
     networks:
@@ -55,6 +55,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 30s
 
   web:
     build:
@@ -63,9 +64,10 @@ services:
     container_name: bia_web
     restart: unless-stopped
     ports:
-      - "5050:5050"
+      - "${APP_PORT:-5050}:5050"
     volumes:
       - ./deploy/nginx.http.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./dist/client:/usr/share/nginx/html:ro
     networks:
       bia_network:
         aliases:
@@ -73,7 +75,7 @@ services:
           - bia_web
     depends_on:
       api:
-        condition: service_healthy
+        condition: service_started
 
 volumes:
   mssql_data:

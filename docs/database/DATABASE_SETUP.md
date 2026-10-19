@@ -1,3 +1,15 @@
+# Current schema v12
+
+See [budget approvals and Gantt](../BUDGET_CHANGES_GANTT.md). Fresh databases use `01_schema.sql`; v11 uses `08_upgrade_v11_to_v12.sql`; older versions use the Python migrator. Reapply current runtime grants. Historical notes follow.
+
+# Current schema v11
+
+See [expense migration and data treatment](../EXPENSES.md). Fresh installations use `01_schema.sql`; v10 uses `07_upgrade_v10_to_v11.sql`; earlier versions use `deploy/migrate.py`. Reapply current runtime grants.
+
+# Current schema v10
+
+The application requires v10 (30 normalized tables). Follow [../COMMERCIAL.md](../COMMERCIAL.md) for the preserving upgrade and runtime grants. Fresh installs use 01_schema.sql. Older release notes follow.
+
 # Current schema v9
 
 The current application requires v9 (24 normalized tables). Follow [../SCHEDULING.md](../SCHEDULING.md) for the preserving v8 upgrade and reapply runtime permissions. Fresh installs use the regenerated 01_schema.sql. Historical v8/v7 notes follow.

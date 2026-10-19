@@ -1,6 +1,5 @@
 import React,{useState} from 'react';
 import {ArrowRight,Eye,EyeOff,LockKeyhole,ShieldCheck} from 'lucide-react';
-import biaLogo from './assets/bia-logo.png';
 
 export default function LoginPage({setupRequired,onLogin,loading,error,onRetry}){
  const [setup,setSetup]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[showPassword,setShowPassword]=useState(false);
@@ -13,7 +12,7 @@ export default function LoginPage({setupRequired,onLogin,loading,error,onRetry})
  }
  return <main className="login-page">
   <section className="login-story" aria-label="BIA project workspace">
-   <div className="brand"><img src={biaLogo} alt="BIA Textiles Project Office" className="brand-logo" /></div>
+   <div className="brand"><img src="/bia-logo.png" alt="BIA Textiles Project Office" className="brand-logo" /></div>
    <div className="login-intro"><span className="eyebrow">ONE WORKSPACE. EVERY PROJECT.</span><h1>From plans{' '}<br/>to progress.</h1><p>A connected view of projects, departments and the people moving them forward.</p></div>
    <div className="login-privacy"><ShieldCheck size={22}/><p>Private team access<span>Your role and department determine the projects and actions available after sign-in.</span></p></div>
   </section>

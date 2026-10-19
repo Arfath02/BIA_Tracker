@@ -23,7 +23,7 @@ def db_engine(monkeypatch):
 def test_normalized_shape_and_sqlserver_ddl():
     from sqlalchemy.schema import CreateTable,CreateIndex
     from sqlalchemy.dialects import mssql
-    assert len(d.metadata.tables)==24
+    assert len(d.metadata.tables)==35
     assert 'data' not in d.workspace.c
     assert 'password_hash' not in d.users.c and 'department' not in d.users.c
     assert 'department' not in d.tasks.c and 'resource' not in d.tasks.c
@@ -157,7 +157,7 @@ def test_v7_upgrade_preserves_existing_rows_and_is_repeatable(db_engine):
     with db_engine.connect() as db:
         after=d.read_state(db)
         assert after==before
-        assert set(db.execute(select(d.schema_migrations.c.version)).scalars())=={7,9}
+        assert set(db.execute(select(d.schema_migrations.c.version)).scalars())=={7,12}
 
 
 def test_v8_calendar_upgrade_is_preserving(db_engine):
@@ -170,4 +170,4 @@ def test_v8_calendar_upgrade_is_preserving(db_engine):
     initialize(db_engine);initialize(db_engine)
     with db_engine.connect() as db:
         assert d.read_state(db)==before
-        assert set(db.execute(select(d.schema_migrations.c.version)).scalars())=={8,9}
+        assert set(db.execute(select(d.schema_migrations.c.version)).scalars())=={8,12}

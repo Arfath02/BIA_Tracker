@@ -14,7 +14,7 @@ Follow [START_HERE.md](../START_HERE.md). `configure.py` creates a permission-06
 
 Always use `docker compose --env-file deploy/.env -f deploy/compose.yaml` from the repository root. The API service's `env_file` supplies database configuration to the container; Compose's `--env-file` separately supplies interpolation for the host IP, HTTPS port and TLS directory.
 
-`production.manage upgrade` is idempotent for schema v7 and copies recognized v1–v6 dbo data into 20 normalized bia tables transactionally. It preserves source tables and financial totals, verifies entity IDs, and does not copy active sessions. See [DATABASE_SETUP.md](../docs/database/DATABASE_SETUP.md) for exact migration, permissions, validation and rollback instructions. Never run the fresh-install SQL against an existing installation.
+`production.manage upgrade` is idempotent for schema v12 and upgrades recognized earlier versions into the current 35-table bia schema transactionally. It also copies recognized v1–v6 dbo data. It preserves source tables and financial totals, verifies entity IDs, and does not copy active sessions. See [DATABASE_SETUP.md](../docs/database/DATABASE_SETUP.md) for exact migration, permissions, validation and rollback instructions. Never run the fresh-install SQL against an existing installation.
 
 The default runtime connection uses encrypted ODBC 18 with certificate validation. For a private SQL CA, put public CA certificates in `deploy/ca-certificates/*.crt` before building the API image. Keep private keys out of that directory. The application HTTPS certificate is mounted separately into Nginx; permit UID 101 to read its private key using an owner/group/ACL policy without making it world-readable.
 

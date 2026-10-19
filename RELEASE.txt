@@ -1,4 +1,4 @@
-BIA tracker — confirmation and early delivery release
-Commit: 74f8622ae3664b32959e3ab900ccb962a10fa143
-SQL schema v9 unchanged. Read START_HERE.md and docs/SCHEDULING.md.
-No live data or credentials included.
+BIA release 2026-10-18.1
+Source commit: 269ace0d59776bdf75a01fbdb91f8efcc06c7ac6
+SQL schema: v12
+Read RELEASE_GUIDE.md before installing or upgrading.

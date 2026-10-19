@@ -1,195 +1,104 @@
-# BIA Digital Transformation Tracker
+# Latest full-source package — 2026-10-18.1
 
-[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
-[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
-[![MSSQL](https://img.shields.io/badge/SQL%20Server-2022-CC292B.svg)](https://www.microsoft.com/sql-server)
+See [RELEASE_GUIDE.md](RELEASE_GUIDE.md). This release repairs seven missing Python HTTP mutation actions and adds authenticated HTTP regression coverage. SQL remains v12.
 
-A private, enterprise-grade project portfolio management workspace for **BIA Textiles**. Features multiple master programmes, subproject work breakdown structures, schedule baselines, financial controls, and role-based access control (RBAC).
+# Dashboard controls, exports and Finance approval inbox
 
----
+See [usage and access controls](docs/CONTROLS_EXPORTS_APPROVALS.md). SQL schema remains v12; deploy the updated frontend and API together.
 
-## Architecture Overview
+# Budget change requests and Gantt — latest release
 
-```mermaid
-graph LR
-  subgraph Client ["Browser Client"]
-    UI["React 19 + Vite (Port 5050)"]
-  end
+See [workflow, charts and v12 upgrade](docs/BUDGET_CHANGES_GANTT.md).
 
-  subgraph Docker ["Docker Compose Network"]
-    NGINX["Nginx Web Proxy (Port 5050)"]
-    API["FastAPI API (Port 8000)"]
-    DB[("Microsoft SQL Server 2022 (Port 1433)")]
-  end
+# BIA Project Portfolio
 
-  UI -->|HTTP / REST| NGINX
-  NGINX -->|/assets, /| NGINX
-  NGINX -->|/api/*| API
-  API -->|pyodbc / ODBC 18| DB
+A private portfolio workspace with multiple master projects, a read-only management dashboard, task execution and financial control.
+
+See [consultant fixes, JOD expenses and v11 upgrade](docs/EXPENSES.md).
+
+See [commercial features and historical v10 upgrade](docs/COMMERCIAL.md) for currencies, payment reminders and consultant travel.
+
+## Install on your server
+
+Start with [START_HERE.md](START_HERE.md). It includes a guided SQL connection wizard, Ubuntu installer and administrator instructions.
+
+## Review URL
+
+https://bia-transformation-control.classicfashi-1604.chatgpt.site
+
+The Site is owner-private. Sign in with the owning ChatGPT account. Select **Set up your account** to establish the initial application administrator. There are no predefined credentials. App accounts are independent of the Sites visitor allowlist; creating an account does not invite a person or broaden Site access.
+
+All initial project schedules, progress, budgets, vendors, POs and invoices are **illustrative data**, not current BIA records. Sample workstreams reflect BIA's transformation context only. The existing BIA Digital Transformation master retains its six initial illustrative subprojects. Administrators can create additional master projects for programmes outside the digital portfolio.
+
+## What works
+
+- **Management dashboard:** cumulative delivery-department progress across all masters → project names and status → tasks and nested subtasks with status, owners, dates and latest updates. Includes master scope, search, breadcrumbs and responsive views.
+- **Management group:** a built-in, initially empty group managed in Admin portal. Assign the Management (read-only) role for full portfolio visibility with server-enforced rejection of business changes. Existing Executive users retain their scoped access.
+
+- Multiple master projects → subprojects → tasks → nested subtasks. Create/edit master names, required primary departments, accountable leads and descriptions; select a master or use All master projects for a consolidated dashboard. Financials, updates and exports follow the selected master. Primary departments appear on master summaries and exports and follow department renames.
+- Master → subprojects → tasks → nested subtasks. Summaries are computed from leaf-task planned hours; no double counting.
+- Planned dates, resources, departments, finish-to-start predecessors within the same master, dependency/parent cycle checks, and timeline views.
+- Progress updates with notes and blocking reasons. A successor cannot start until all predecessor deliverables finish. Incomplete work is never rounded up to 100%.
+- Shared server persistence, account sign-in, admin/head/delegate/finance/executive permissions, account revocation and password changes.
+- Department groups derive membership from account departments. Administrators manage explicit project sharing. Management members see all projects in read-only mode. Other users see only projects they create, manage as a department head, have tasks assigned in, or receive through a group. API responses, dashboards, financials, exports and activity are filtered. Heads create/plan department subprojects and delegates; delegates update only assigned tasks. Finance/executive roles require project visibility grants too.
+- Department and project filters, search, project drill-down, management RAG status, activity history, CSV reports.
+- Currency-specific project budgets, purchase orders, linked invoices, full invoice settlement records and payment references. USD management totals use explicit project reporting rates. Date/milestone payment conditions and consultant visits are maintained in project Finance and Travel tabs. Commitments cannot exceed the subproject budget; cumulative invoices cannot exceed their PO. No payments are initiated.
+- Admin portal for department, vendor and resource master data; account creation/editing, role/department changes, disabling and password resets; audit history. Inactive values are preserved for historical records.
+- Version checks reject stale writes. All successful business changes have a server-authored activity entry.
+
+## Two deployment environments
+
+| Layer | Private Sites review | Ubuntu deployment package |
+|---|---|---|
+| Frontend | React 19 + Vite | Same React app, production edition |
+| API | Cloudflare Worker adapter | Python FastAPI |
+| Database | Managed D1 with versioned review state | Normalized Microsoft SQL Server tables via SQLAlchemy + ODBC 18 |
+| Identity | Sites private gate + app sessions | App sessions behind internal HTTPS; optional enterprise SSO to be integrated separately |
+| Password storage | PBKDF2-SHA256, WebCrypto 100k iterations | Argon2id (64 MiB, 3 passes, parallelism 2) |
+| Audit | Review activity capped at 1,000 business entries | Append-only application audit and progress-update tables |
+| TLS | Managed by Sites | Nginx reverse proxy with organization-trusted certificate |
+
+The Sites runtime is not an Ubuntu/Python/SQL Server host. No BIA server, database, DNS, ERP, mailbox or other existing external system has been modified. The private review and production backend are separate adapters for the same frontend API contract.
+
+## Local review and tests
+
+```sh
+npm ci
+npm run build
+node scripts/preview.mjs
 ```
 
-* **Frontend**: React 19, Vite, responsive enterprise UI, Lucide icons, date-aware timeline & breakdown charts.
-* **Backend API**: Python 3.12, FastAPI, SQLAlchemy 2.0 ORM, Argon2id password hashing, Uvicorn.
-* **Database**: Microsoft SQL Server 2022 with normalized relational tables (`bia` schema, Schema v9).
-* **Reverse Proxy**: Nginx (unprivileged Alpine) routing `/api/` traffic and serving optimized static assets.
-* **Port Allocation**: Runs on **Port 5050** to avoid conflicts with other host services (e.g., Jenkins on port 8080).
+Open http://127.0.0.1:8787. The local D1 store is separate from the hosted Site.
 
----
-
-## Key Features
-
-### 1. Programme & Portfolio Management
-* **Master Projects**: Group related initiatives under executive programmes (e.g., Factory Expansion, ERP Migration).
-* **Subprojects & Milestones**: Effort-weighted completion rollups from leaf deliverables—no double counting.
-* **Timeline & Dependencies**: Finish-to-start predecessor links with cycle detection and working-day calendar logic.
-* **Schedule Baselines**: Immutable snapshots of agreed dates and tasks to measure project delay variance over time.
-
-### 2. Financial Governance (USD)
-* **Budgets & Commitments**: Purchase orders (POs) validated strictly against approved subproject budgets.
-* **Invoice Matching**: Invoices linked to PO balances; cumulative invoices cannot exceed approved commitments.
-* **Settlement Tracking**: Records invoice payment references and settlement dates without initiating external bank transfers.
-
-### 3. Role-Based Access Control (RBAC) & Governance
-* **Admin**: Complete system governance, master data management (departments, vendors, resources), user creation, role assignment, and password resets.
-* **Management**: Consolidated read-only executive view across all master programmes.
-* **Vertical Head**: Department-level planning, subproject management, and delegate assignment within their vertical.
-* **Delegate**: Team members assigned to deliver specific tasks; can update task progress, post notes, and flag delivery blockers.
-* **Finance**: Create purchase orders, match invoices, and record settlements.
-* **Executive**: Scoped read access granted to specific subprojects via department access groups.
-* **Security & Audit**: Append-only audit logs for all mutations; Argon2id password hashing; SameSite Strict session cookies; CSRF defense via mandatory `X-BIA-Request: 1` header.
-
----
-
-## Quick Start (Docker Deployment)
-
-### Prerequisites
-* [Docker](https://docs.docker.com/engine/install/) & [Docker Compose](https://docs.docker.com/compose/install/) (v2.20+)
-* Git
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/<your-org>/bia-tracker.git
-cd bia-tracker
-```
-
-
-# Application Web Port (Port 5050 to avoid Jenkins/8080 conflicts)
-APP_PORT=5050
-TRUSTED_ORIGINS=http://localhost:5050,http://127.0.0.1:5050,http://<your-server-ip>:5050
-```
-
-### 3. Build & Launch Containers
-```bash
-sudo docker compose build
-sudo docker compose up -d
-```
-
-Verify that all three containers are healthy:
-```bash
-sudo docker compose ps
-```
-You should see:
-* `bia_sqlserver`: `Up (healthy)`
-* `bia_api`: `Up (healthy)`
-* `bia_web`: `Up` mapped to `0.0.0.0:5050->5050/tcp`
-
-### 4. Initialize Database Schema (Schema v9)
-Run the migration manager inside the API container:
-```bash
-sudo docker compose run --rm api python -m production.manage upgrade
-```
-
-### 5. Create the Initial Administrator Account
-```bash
-sudo docker compose run --rm api python -m production.manage create-admin
-```
-
-
-### 6. Open the Application
-Navigate in your browser to:
-```text
-http://<your-server-ip>:5050
-```
-Sign in with your newly created administrator credentials to open the BIA Workspace Dashboard.
-
----
-
-## Database Management & Operations
-
-The `production.manage` module provides administrative CLI tools:
-
-| Command | Description |
-|---|---|
-| `python -m production.manage check-db` | Validates SQL Server connectivity and driver configuration. |
-| `python -m production.manage upgrade` | Applies schema migrations up to the current schema (v9) non-destructively. |
-| `python -m production.manage create-admin` | Creates a new admin account or resets an existing administrator password. |
-| `python -m production.manage init` | Initializes empty baseline tables on a fresh database instance. |
-
----
-
-## Directory Structure
-
-```text
-bia-tracker/
-├── deploy/                  # Production Docker & deployment configs
-│   ├── Dockerfile.api       # Python 3.12 + MS ODBC Driver 18 container
-│   ├── Dockerfile.web       # Node build + Nginx runtime container
-│   ├── nginx.http.conf      # Reverse proxy routing (port 5050)
-│   └── ca-certificates/     # Custom corporate root certificates (if required)
-├── docs/                    # Architecture diagrams, data dictionary & security reviews
-│   └── database/            # ERD HTML preview & schema documentation
-├── migrations/              # SQL Server DDL migrations
-├── production/              # Backend service (Python / FastAPI)
-│   ├── access.py            # RBAC filtering & visibility boundary
-│   ├── app.py               # FastAPI router, auth, CORS & security middleware
-│   ├── catalogs.py          # Master data dropdown validation (departments, vendors)
-│   ├── database.py          # SQLAlchemy relational models & queries
-│   ├── domain.py            # Business logic (tasks, baselines, financials, scheduling)
-│   ├── manage.py            # Administrative CLI (migrations, admin setup)
-│   └── requirements.lock    # Pinned production Python dependencies
-├── public/                  # Static assets (favicons, manifest)
-├── src/                     # Frontend client (React 19 + Vite)
-│   ├── assets/              # BIA brand logos and iconography
-│   ├── BaselineViews.jsx    # Schedule baseline comparison panels & timeline
-│   ├── LoginPage.jsx        # Secure workspace authentication view
-│   ├── main.jsx             # Root application shell, state router & modals
-│   └── style.css            # Responsive layout & design tokens
-├── tests/                   # Integration and unit test suites
-├── docker-compose.yml       # Production Compose definition (Port 5050)
-└── .env.example             # Template environment variables
-```
-
----
-
-## Local Development (Without Docker)
-
-### Frontend Development
-```bash
-npm install
-npm run dev
-```
-Runs Vite development server at `http://localhost:5173`.
-
-### Backend Testing
-```bash
+```sh
+npm test
+npm run test:api
+npm run test:admin
+npm run test:masters
+npm run test:access
+npm run test:management
+npm run test:ui
 python -m venv .venv
-source .venv/bin/activate    # On Windows: .venv\Scripts\activate
-pip install -r production/requirements.lock
-pytest tests/test_python_api.py -q
+. .venv/bin/activate
+pip install -r production/requirements.lock -r production/requirements-test.txt
+python -m pytest tests/test_python_api.py tests/test_sql_normalization.py -q
 ```
 
----
+The API integration suite runs an isolated in-memory Worker/D1 environment. Python API tests run SQLite locally and compile the schema for the SQL Server dialect; they do not prove execution against a real SQL Server.
 
-## Security Best Practices
-* **No Plaintext Passwords in Git**: `docker-compose.yml` does not contain hardcoded passwords; all secrets are sourced at runtime from `.env` (which is excluded via `.gitignore`).
-* **Origin Enforcement**: API requests with write operations (`POST`) strictly validate both the `Origin` header against `TRUSTED_ORIGINS` and require the CSRF token header `X-BIA-Request: 1`.
-* **Database Isolation**: The SQL Server database user operates under the dedicated `bia` schema; destructive `DROP TABLE` actions are forbidden by design.
-* **Session Lifetime**: Sessions use cryptographically secure 48-byte URL-safe tokens stored as SHA-256 hashes in SQL Server, set with `HttpOnly`, `SameSite=Strict`, and an 8-hour expiration.
+## Ubuntu deployment
 
----
+See [deployment guide](deploy/README.md). Schema creation and initial administrator creation are explicit operator actions. Production startup performs no DDL and does not load sample data. No credentials are in source control.
 
-## License & Ownership
+## Release evidence and remaining gates
 
-Private and proprietary. Designed and maintained for **BIA Textiles Project Office**.
+See [validation record](VALIDATION.md). This is a working review prototype and an implementation baseline for controlled production deployment, not a completed production acceptance or security certification. Before operational use, complete actual SQL Server integration tests, end-to-end browser acceptance, backup/restore validation, credential/identity review, dependency scanning, and load testing for the intended number of users. The review stores a bounded workspace snapshot; use the normalized Python/SQL Server backend for operational scale.
+
+Prototype design decisions: multiple master portfolios, USD reporting, finish-to-start dependencies, calendar-day dates in Asia/Amman, full invoice payments, and no destructive delete action. Editing a PO or project baseline after approval, automated schedule recalculation, partial payments, attachments and approval routing are not implemented in this first version.
+
+References: [Sites hosting](https://learn.chatgpt.com/docs/sites), [D1 configuration](https://developers.cloudflare.com/workers/wrangler/configuration/), [FastAPI password security](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/).
+
+
+## Normalized SQL Server release (v7)
+
+The Python backend uses 20 linked tables in the bia schema, including dedicated departments, vendors, resources, credentials and invoice settlements. See [database setup](docs/database/DATABASE_SETUP.md), [offline ERD](docs/database/BIA_ERD.html), [data dictionary](docs/database/DATA_DICTIONARY.md) and [security review](docs/SECURITY_REVIEW.md). The private Sites prototype remains a separate D1 review deployment. No live prototype data or SQL credentials are included.

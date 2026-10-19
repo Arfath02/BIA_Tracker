@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {build} from 'esbuild';
+import {Miniflare} from 'miniflare';
+import {initializeLocalDatabase} from '../scripts/local-db.mjs';
+const mf=new Miniflare({scriptPath:'dist/worker.js',modules:true,compatibilityDate:'2026-05-22',d1Databases:['DB'],cf:false});await initializeLocalDatabase(mf);
+let cookie='',checks=0;
+const api=async(path,body,status=200)=>{const r=await mf.dispatchFetch('https://bia.test/api/'+path,{method:body?'POST':'GET',headers:{Cookie:cookie,Origin:'https://bia.test','Content-Type':'application/json','X-BIA-Request':'1'},body:body?JSON.stringify(body):undefined});if(r.headers.has('set-cookie'))cookie=r.headers.get('set-cookie').split(';')[0];assert.equal(r.status,status,await r.clone().text());return r.json()};
+await api('setup',{name:'Admin',email:'admin@test.example',password:'Test-password-12345'});
+let s=await api('state');
+const project=s.projects[0],originalBudget=project.budget;
+await api('mutate',{action:'change_request',version:s.version,payload:{projectId:project.id,title:'Integration extension',reason:'Additional supplier interface',amount:5000}});
+await api('users',{name:'Approver',email:'approver@test.example',password:'Test-password-12345',role:'admin',department:'Digital & IT'});
+await api('login',{email:'approver@test.example',password:'Test-password-12345'});s=await api('state');
+
+const bundle=await build({entryPoints:['src/main.jsx'],bundle:true,format:'iife',write:false,loader:{'.css':'empty'},define:{'import.meta.env.VITE_EDITION':'"review"'}});
+const dom=new JSDOM('<div id="root"></div>',{url:'https://bia.test',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,doc=w.document,errors=[];
+w.addEventListener('error',e=>errors.push(e.message));w.fetch=async(path,options={})=>{const r=await mf.dispatchFetch(new URL(path,'https://bia.test'),{...options,headers:{...options.headers,Origin:'https://bia.test',Cookie:cookie}});if(r.headers.has('set-cookie'))cookie=r.headers.get('set-cookie').split(';')[0];return r};
+const wait=async fn=>{for(let i=0;i<400;i++){if(fn())return;await new Promise(r=>setTimeout(r,10))}throw Error(doc.body.textContent.slice(-3000))};
+const top=()=>[...doc.querySelectorAll('[role=dialog]')].at(-1);
+const click=(text,scope=doc)=>{const b=[...scope.querySelectorAll('button')].find(b=>(b.getAttribute('aria-label')||b.textContent.trim())===text);assert(b,text);b.click()};
+const set=(el,value)=>{const proto=el.tagName==='SELECT'?w.HTMLSelectElement.prototype:el.tagName==='TEXTAREA'?w.HTMLTextAreaElement.prototype:w.HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new w.Event('input',{bubbles:true}));el.dispatchEvent(new w.Event('change',{bubbles:true}))};
+const fill=(name,value)=>set(top().querySelector(`[name="${name}"]`),value);
+const submit=()=>top().querySelector('form').dispatchEvent(new w.SubmitEvent('submit',{bubbles:true,cancelable:true}));
+try{
+ w.eval(bundle.outputFiles[0].text);await wait(()=>doc.querySelector('.project-row'));
+ const chart=()=>doc.querySelector('[aria-label="Portfolio Gantt"]');
+ assert(chart());click('Collapse Gantt',chart());await wait(()=>chart().querySelector('[aria-expanded]').getAttribute('aria-expanded')==='false');assert(chart().querySelector('[hidden]'));click('Expand Gantt',chart());await wait(()=>!chart().querySelector('[hidden]'));click('Collapse portfolio');await wait(()=>doc.querySelector('#portfolio-at-glance-content').hidden);click('Expand portfolio');await wait(()=>!doc.querySelector('#portfolio-at-glance-content').hidden);checks++;const master=s.masterProjects.find(m=>m.id===project.masterId);
+ chart().querySelector(`[aria-label="Open Gantt for ${master.title}"]`).click();await wait(()=>chart().querySelector(`[aria-label="Open Gantt for ${project.title}"]`));
+ chart().querySelector(`[aria-label="Open Gantt for ${project.title}"]`).click();await wait(()=>chart().querySelector('[aria-label="Gantt detail level"]').value==='tasks');
+ assert.equal(chart().querySelectorAll('.gantt-row').length,1+s.tasks.filter(t=>t.projectId===project.id).length);assert(chart().textContent.includes('2026'));checks++;
+ set(chart().querySelector('[aria-label="Gantt scale"]'),'weeks');await wait(()=>chart().querySelector('[aria-label="Gantt scale"]').value==='weeks');checks++;
+ click('All master projects',chart());await wait(()=>chart().querySelector('[aria-label="Gantt detail level"]').value==='masters');set(chart().querySelector('[aria-label="Gantt detail level"]'),'tasks');await wait(()=>chart().querySelectorAll('.gantt-row').length===s.projects.length+s.tasks.length);checks++;
+ [...doc.querySelectorAll('.project-row')].find(b=>b.textContent.includes(project.title)).click();await wait(()=>top()?.querySelector('.detail-toolbar'));click('Finance',top());await wait(()=>top()?.textContent.includes('Integration extension'));
+ click('Review request',top());await wait(()=>top()?.querySelector('[name=decisionNote]'));fill('decisionNote','Reviewed additional scope and cost');click('Approve budget change',top());await wait(()=>top()?.querySelector('.budget-changes'));
+ s=await api('state');assert.equal(s.projects.find(p=>p.id===project.id).budget,originalBudget+5000);assert.equal(s.changeRequests[0].status,'Approved');assert(top().textContent.includes('Revised approved budget'));checks++;
+ const approvedVersion=s.version;await api('mutate',{action:'change_decision',version:s.version,payload:{projectId:project.id,id:s.changeRequests[0].id,decision:'Approved',decisionNote:'Duplicate'}},422);checks++;
+ click('Create additional PO',top());await wait(()=>top()?.querySelector('[name=number]'));fill('number','CHANGE-PO-1');fill('date','2026-10-01');fill('vendor',top().querySelector('[name=vendor]').options[1].value);set(top().querySelector('[aria-label=Amount]'),'5000');fill('description','Approved integration extension');submit();await wait(()=>top()?.querySelector('.budget-changes'));
+ s=await api('state');const po=s.pos.find(p=>p.number==='CHANGE-PO-1');click('Add change invoice',top());await wait(()=>top()?.querySelector('[name=changeRequestId]'));const posel=[...top().querySelectorAll('select')].find(el=>[...el.options].some(o=>o.value===po.id));set(posel,po.id);fill('number','CHANGE-INV-1');fill('date','2026-10-02');fill('due','2026-10-30');submit();await wait(()=>top()?.querySelector('.budget-changes'));s=await api('state');assert.equal(s.invoices.find(i=>i.number==='CHANGE-INV-1').changeRequestId,s.changeRequests[0].id);assert.equal(s.projects.find(p=>p.id===project.id).budget,originalBudget+5000);checks++;
+ click('Request budget change',top());await wait(()=>top()?.querySelector('[name=reason]'));fill('title','More training');fill('reason','Additional workshop');set(top().querySelector('[aria-label=Amount]'),'100');click('Submit change request',top());await wait(()=>top()?.querySelector('.budget-changes'));assert(top().textContent.includes('Awaiting another approver'));s=await api('state');assert.equal(s.projects.find(p=>p.id===project.id).budget,originalBudget+5000);checks++;
+ const own=s.changeRequests.find(c=>c.title==='More training');await api('mutate',{action:'change_decision',version:s.version,payload:{projectId:project.id,id:own.id,decision:'Approved',decisionNote:'Self approval'}},422);checks++;
+ click('Timeline',top());await wait(()=>top()?.querySelector('[aria-label="Portfolio Gantt"]'));assert.equal(top().querySelector('[aria-label="Gantt detail level"]').value,'tasks');checks++;
+ assert.deepEqual(errors,[]);console.log(`${checks} change-request/Gantt UI/API checks passed: drill-down, all tasks, zoom, approval, replay rejection, PO-linked invoice, unchanged invoice budget, pending request and self-approval rejection.`);
+}finally{dom.window.close();await mf.dispose()}

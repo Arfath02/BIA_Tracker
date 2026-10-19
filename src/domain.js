@@ -1,3 +1,5 @@
+import {withFinance,financeScope,usd,usdMillions,currencyMoney} from './finance.js';
+import {commercialActions,commercialMutate,projectCommercial,amountIn,validateInvoiceTerm,validateInvoiceChange} from './commercial.js';
 import {calendar,normalizeTask,reschedule,scheduleAudit,effectiveFinish} from './scheduling.js';
 import {taskVariance,projectVariance} from './baselines.js';
 import {withAccess,canSeeProject,projectForAction} from './access.js';
@@ -5,8 +7,8 @@ import {catalogRows,allowedChoice,catalogKinds} from './catalogs.js';
 export const departments=['Digital & IT','Warehouse','Production','Quality','HR','Engineering'];
 export const roles={admin:'Administrator',management:'Management (read-only)',executive:'Executive',head:'Vertical head',delegate:'Delegate',finance:'Finance'};
 export const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Amman',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-export const money=(n,compact=false)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0,notation:compact?'compact':'standard'}).format(n||0);
-export const dateLabel=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—';
+export const money=(n,compact=false)=>compact?usdMillions(n):currencyMoney(n);
+export const dateLabel=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'—';
 export function leaves(s,projectId,parentId){let tasks=s.tasks.filter(t=>!projectId||t.projectId===projectId);if(parentId){const ids=new Set([parentId]);let changed=true;while(changed){changed=false;for(const t of tasks)if(ids.has(t.parentId)&&!ids.has(t.id)){ids.add(t.id);changed=true}}tasks=tasks.filter(t=>ids.has(t.id))}return tasks.filter(t=>!s.tasks.some(x=>x.parentId===t.id))}
 export function progress(s,projectId,parentId){let ts=leaves(s,projectId,parentId),weight=ts.reduce((a,t)=>a+t.effort,0);return weight?(ts.every(t=>t.progress===100)?100:Math.min(99,Math.round(ts.reduce((a,t)=>a+t.progress*t.effort,0)/weight))):0}
 export function taskStatus(s,t){const p=progress(s,t.projectId,t.id);if(p===100)return 'Complete';if(t.blocked)return 'Blocked';if(taskVariance(s,t).delayed)return 'Delayed';if(t.externalPredecessorsPending||t.predecessors.some(id=>progress(s,null,id)<100))return 'Waiting';if(t.due<today())return 'Overdue';return p?'In progress':'Planned'}
@@ -14,7 +16,7 @@ export function projectStatus(s,p){const ts=leaves(s,p.id);if(ts.length&&progres
 export function canPlan(u,dept){return !!u&&(u.role==='admin'||u.role==='head'&&u.department===dept)}
 export function canUpdate(u,t){return canPlan(u,t.department)||!!u&&u.role==='delegate'&&t.assigneeId===u.id}
 export function canFinance(u){return !!u&&['admin','finance'].includes(u.role)}
-export function totals(s){const budget=s.projects.reduce((a,p)=>a+p.budget,0),committed=s.pos.reduce((a,p)=>a+p.amount,0),invoiced=s.invoices.reduce((a,p)=>a+p.amount,0),paid=s.invoices.filter(i=>i.status==='Paid').reduce((a,p)=>a+p.amount,0);return{budget,committed,invoiced,paid,remaining:budget-committed}}
+export function totals(s){const project=id=>s.projects.find(p=>p.id===id),invoiceProject=i=>project(s.pos.find(p=>p.id===i.poId)?.projectId);const budget=s.projects.reduce((a,p)=>a+usd(p.budget,p),0),committed=s.pos.reduce((a,p)=>a+usd(p.amount,project(p.projectId)),0),invoiced=s.invoices.reduce((a,i)=>a+usd(i.amount,invoiceProject(i)),0),paid=s.invoices.filter(i=>i.status==='Paid').reduce((a,i)=>a+usd(i.amount,invoiceProject(i)),0);return{budget,committed,invoiced,paid,remaining:budget-committed}}
 const fail=m=>{throw Object.assign(new Error(m),{status:422})};
 const text=(v,label,max=180)=>{if(typeof v!=='string'||!v.trim()||v.trim().length>max)fail(`${label} is required (maximum ${max} characters).`);return v.trim()};
 const num=(v,label,min,max)=>{if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)fail(`${label} must be between ${min} and ${max}.`);return v};
@@ -22,9 +24,9 @@ const date=(v,label)=>{if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)||N
 const permission=ok=>{if(!ok)throw Object.assign(new Error('Your role does not allow this action.'),{status:403})};
 export function mutate(state,user,action,payload,id=crypto.randomUUID()){
  permission(user?.role!=='management');
- const s=withAccess(structuredClone(state)),b=payload||{};s.catalogs=catalogRows(s);let label='';let auditProjectId=projectForAction(s,action,b)?.id||null;
- if(['task','update','po','invoice','payment','project_access','baseline','project_dates','project_calendar'].includes(action))permission(canSeeProject(s,user,projectForAction(s,action,b)));
- if(action==='baseline'){
+ let s=withFinance(withAccess(structuredClone(state))),b=payload||{};s.catalogs=catalogRows(s);let label='';let auditProjectId=projectForAction(s,action,b)?.id||null;
+ if(['task','update','po','invoice','payment','project_access','baseline','project_dates','project_calendar',...commercialActions.filter(a=>a!=='consultant')].includes(action))permission(action==='change_decision'&&user.role==='finance'||canSeeProject(s,user,projectForAction(s,action,b)));
+ if(commercialActions.includes(action)){const result=commercialMutate(s,user,action,b,id,today());s=result.state;label=result.label;}else if(action==='baseline'){
   const p=s.projects.find(p=>p.id===b.projectId);permission(p&&canPlan(user,p.department));
   const tasks=s.tasks.filter(t=>t.projectId===p.id);if(!tasks.length)fail('Add a task plan before saving a baseline.');
   s.baselines=s.baselines||[];const version=Math.max(0,...s.baselines.filter(x=>x.projectId===p.id).map(x=>x.version))+1;
@@ -65,18 +67,19 @@ export function mutate(state,user,action,payload,id=crypto.randomUUID()){
   if(s.users.some(x=>x.id!==u.id&&x.email.toLowerCase()===u.email))fail('An account with this email already exists.');
   if(u.id===user.id&&(!u.active||u.role!=='admin'))fail('You cannot disable or demote your own administrator account.');
   if(old.active&&old.role==='admin'&&(!u.active||u.role!=='admin')&&!s.users.some(x=>x.id!==u.id&&x.active&&x.role==='admin'))fail('Keep at least one active administrator.');
-  if(u.active&&s.tasks.some(t=>t.assigneeId===u.id&&t.progress<100&&(u.role!=='admin'&&(!['head','delegate'].includes(u.role)||u.department!==t.department))))fail('Reassign this account’s open tasks before changing its role or department.');
+  if(u.active&&s.tasks.some(t=>t.assigneeId===u.id&&t.progress<100&&!['admin','head','delegate'].includes(u.role)))fail('Reassign this account’s open tasks before changing its role.');
   s.users=s.users.map(x=>x.id===u.id?u:x);label=`Updated account · ${u.name} · ${roles[u.role]} · ${u.active?'active':'disabled'}`;
  }else if(action==='project'){
   permission(user?.role==='admin'||user?.role==='head'&&user.department===b.department);
   const p={id,masterId:b.masterId,createdById:user.id,accessGroupIds:[],offDays:calendar(b.offDays),title:text(b.title,'Project title',100),department:b.department,owner:text(b.owner,'Project lead',80),budget:num(b.budget,'Budget',0,1e10),start:date(b.start,'Start'),due:date(b.due,'Due date'),description:typeof b.description==='string'?b.description.trim().slice(0,1000):'',color:['#b31c3f','#386c77','#ac783d','#6665a8','#537861','#4e6f9d'][s.projects.length%6]};
   if(!s.masterProjects.some(m=>m.id===p.masterId))fail('Select a valid master project.');
-  if(!allowedChoice(s,'department',p.department))fail('Select a valid department.');if(p.due<p.start)fail('Due date must follow the start date.');s.projects.push(p);auditProjectId=p.id;label=`Created subproject · ${p.title}`;
+  if(!allowedChoice(s,'department',p.department))fail('Select a valid department.');if(p.due<p.start)fail('Due date must follow the start date.');Object.assign(p,projectCommercial(s,b,p,today()));p.budget=amountIn(p.budget,p,'Budget');s.projects.push(p);auditProjectId=p.id;label=`Created subproject · ${p.title}`;
  }else if(action==='task'){
   const project=s.projects.find(p=>p.id===b.projectId);if(!project)fail('Select a valid subproject.');permission(canPlan(user,project.department));
   const old=b.id?s.tasks.find(t=>t.id===b.id):null;if(b.id&&!old)fail('Task not found.');if(old&&old.projectId!==project.id)fail('Tasks cannot move between subprojects.');
   const hiddenPredecessors=(old?.predecessors||[]).filter(pred=>!canSeeProject(s,user,s.projects.find(p=>p.id===s.tasks.find(t=>t.id===pred)?.projectId)));
-  const t={id:old?.id||id,projectId:project.id,title:text(b.title,'Task title'),department:project.department,parentId:b.parentId||null,predecessors:Array.isArray(b.predecessors)?[...new Set([...b.predecessors,...hiddenPredecessors])]:hiddenPredecessors,assigneeId:b.assigneeId||null,resource:text(b.resource||'Unassigned','Resource',80),effort:num(b.effort,'Planned hours',1,100000),start:date(b.start,'Start'),due:date(b.due,'Due date'),progress:old?.progress||0,blocked:old?.blocked||false,isMilestone:b.isMilestone===undefined?!!old?.isMilestone:b.isMilestone};
+  const t={id:old?.id||id,projectId:project.id,title:text(b.title,'Task title'),department:project.department,parentId:b.parentId||null,predecessors:Array.isArray(b.predecessors)?[...new Set([...b.predecessors,...hiddenPredecessors])]:hiddenPredecessors,assigneeId:b.assigneeId||null,resource:text(b.resource||old?.resource||'Unassigned','Resource',80),effort:num(b.effort,'Planned hours',1,100000),start:date(b.start,'Start'),due:date(b.due,'Due date'),progress:old?.progress||0,blocked:old?.blocked||false,isMilestone:b.isMilestone===undefined?!!old?.isMilestone:b.isMilestone};
+  if(old?.isMilestone&&!t.isMilestone&&s.paymentTerms.some(x=>x.milestoneId===t.id&&!x.cancelled))fail('This milestone is used by a payment condition.');
   if(typeof t.isMilestone!=='boolean')fail('Milestone must be true or false.');
   if(!old||old.start!==t.start||old.due!==t.due)normalizeTask(t,project);
   const dateChanged=old&&(old.start!==t.start||old.due!==t.due);
@@ -85,7 +88,7 @@ export function mutate(state,user,action,payload,id=crypto.randomUUID()){
   if(t.due<t.start)fail('Due date must follow the start date.');if(t.start<project.start)fail('Task start must be within the subproject dates.');
   const parent=t.parentId?s.tasks.find(x=>x.id===t.parentId):null;if(t.parentId&&(!parent||parent.projectId!==t.projectId||parent.id===t.id))fail('Select a valid parent in the same subproject.');
   if(parent&&(parent.progress>0||parent.predecessors.length))fail('Subtasks can be added only to a parent with no recorded progress or predecessors.');
-  if(t.assigneeId&&!s.users.some(u=>u.id===t.assigneeId&&u.active&&['head','delegate','admin'].includes(u.role)&&(u.role==='admin'||u.department===t.department)))fail('Select an active resource in this department.');
+  if(t.assigneeId&&!s.users.some(u=>u.id===t.assigneeId&&u.active&&['head','delegate','admin'].includes(u.role)))fail('Select an active account.');
   for(const pred of t.predecessors){const p=s.tasks.find(x=>x.id===pred);if(!p||pred===t.id)fail('Invalid predecessor.');if(!hiddenPredecessors.includes(pred))permission(canSeeProject(s,user,s.projects.find(x=>x.id===p.projectId)));if(s.projects.find(x=>x.id===p.projectId)?.masterId!==project.masterId)fail('Predecessors must belong to the same master project.');if(effectiveFinish(s,p)>=t.start)fail('Finish-to-start dependencies require the task to start after its predecessor finishes.');}
   s.tasks=old?s.tasks.map(x=>x.id===t.id?t:x):[...s.tasks,t];
   for(const x of s.tasks){if(x.parentId===t.id&&(x.start<t.start||x.due>t.due))fail('Parent dates must contain all subtasks.');}
@@ -107,13 +110,13 @@ export function mutate(state,user,action,payload,id=crypto.randomUUID()){
   t.progress=next;t.blocked=next===100?false:b.blocked;s.updates.unshift({id,taskId:t.id,progress:next,note,author:user.name,authorId:user.id,createdAt:new Date().toISOString()});label=`Updated progress · ${t.title} → ${next}%`+(early?(b.rescheduleSuccessors?' · Early completion: reschedule confirmed':' · Early completion: retained dates'):'')+scheduleAudit(changes);
  }else if(action==='po'){
   permission(canFinance(user));const p=s.projects.find(p=>p.id===b.projectId);if(!p)fail('Select a valid subproject.');
-  const po={id,projectId:p.id,number:text(b.number,'PO number',60),vendor:text(b.vendor,'Vendor',100),amount:num(b.amount,'PO amount',0.01,1e10),date:date(b.date,'PO date'),description:text(b.description,'Description',300)};
+  const po={id,projectId:p.id,number:text(b.number,'PO number',60),vendor:text(b.vendor,'Vendor',100),amount:num(b.amount,'PO amount',0.0001,1e10),date:date(b.date,'PO date'),description:text(b.description,'Description',300)};
   if(!allowedChoice(s,'vendor',po.vendor))fail('Select an active vendor.');
-  po.amount=Math.round(po.amount*100)/100;if(s.pos.some(x=>x.number.toLowerCase()===po.number.toLowerCase()))fail('This PO number already exists.');if(s.pos.filter(x=>x.projectId===p.id).reduce((a,x)=>a+x.amount,0)+po.amount>p.budget)fail('This PO exceeds the available subproject budget.');s.pos.push(po);label=`Created PO · ${po.number}`;
+  po.amount=amountIn(po.amount,p,'PO amount',0.0001);if(s.pos.some(x=>x.number.toLowerCase()===po.number.toLowerCase()))fail('This PO number already exists.');if(s.pos.filter(x=>x.projectId===p.id).reduce((a,x)=>a+x.amount,0)+po.amount>p.budget)fail('This PO exceeds the available subproject budget.');s.pos.push(po);label=`Created PO · ${po.number}`;
  }else if(action==='invoice'){
   permission(canFinance(user));const po=s.pos.find(p=>p.id===b.poId);if(!po)fail('Select a valid purchase order.');
-  const inv={id,poId:po.id,number:text(b.number,'Invoice number',60),amount:Math.round(num(b.amount,'Invoice amount',0.01,1e10)*100)/100,date:date(b.date,'Invoice date'),due:date(b.due,'Payment due date'),status:'Unpaid'};
-  if(inv.due<inv.date||inv.date<po.date)fail('Check invoice and payment due dates against the PO date.');if(s.invoices.some(x=>x.poId===po.id&&x.number.toLowerCase()===inv.number.toLowerCase()))fail('This invoice number already exists for the PO.');if(Math.round((s.invoices.filter(x=>x.poId===po.id).reduce((a,x)=>a+x.amount,0)+inv.amount)*100)>Math.round(po.amount*100))fail('Total invoices cannot exceed the purchase order amount.');s.invoices.push(inv);label=`Recorded invoice · ${inv.number}`;
+  const inv={id,poId:po.id,number:text(b.number,'Invoice number',60),amount:amountIn(b.amount,s.projects.find(p=>p.id===po.projectId),'Invoice amount',0.0001),date:date(b.date,'Invoice date'),due:date(b.due,'Payment due date'),status:'Unpaid'};
+  if(inv.due<inv.date||inv.date<po.date)fail('Check invoice and payment due dates against the PO date.');if(s.invoices.some(x=>x.poId===po.id&&x.number.toLowerCase()===inv.number.toLowerCase()))fail('This invoice number already exists for the PO.');if(s.invoices.filter(x=>x.poId===po.id).reduce((a,x)=>a+x.amount,0)+inv.amount>po.amount+1e-7)fail('Total invoices cannot exceed the purchase order amount.');inv.changeRequestId=validateInvoiceChange(s,b,po,inv.amount);inv.termId=validateInvoiceTerm(s,b,po,inv.amount);s.invoices.push(inv);label=`Recorded invoice · ${inv.number}`;
  }else if(action==='payment'){
   permission(canFinance(user));const i=s.invoices.find(x=>x.id===b.invoiceId);if(!i)fail('Invoice not found.');if(i.status==='Paid')fail('This invoice is already paid.');i.reference=text(b.reference,'Payment reference',100);i.paidDate=date(b.paidDate,'Payment date');if(i.paidDate<i.date||i.paidDate>today())fail('Payment date must be between the invoice date and today.');i.status='Paid';label=`Recorded payment · ${i.number}`;
  }else fail('Unknown action.');

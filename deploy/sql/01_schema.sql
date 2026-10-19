@@ -1,6 +1,6 @@
--- BIA normalized schema v9. Generated from production/database.py.
+-- BIA normalized schema v12. Generated from production/database.py.
 -- NEW dedicated SQL Server database only. Select your database in SSMS first.
--- Existing v1-v8 installations: use python3 deploy/migrate.py instead.
+-- Existing v1-v11 installations: use python3 deploy/migrate.py instead.
 -- Requires a migration/DBA identity. Does not create logins or contain secrets.
 -- This entire installation is transactional and fails if bia tables exist.
 SET XACT_ABORT ON;
@@ -12,6 +12,14 @@ IF EXISTS (SELECT 1 FROM sys.tables WHERE schema_id=SCHEMA_ID(N'dbo') AND name I
     THROW 51001, 'Possible existing application found. Use the preserving migration.', 1;
 IF SCHEMA_ID(N'bia') IS NULL EXEC(N'CREATE SCHEMA bia AUTHORIZATION dbo');
 
+
+CREATE TABLE bia.currency_codes (
+	code VARCHAR(3) NOT NULL,
+	name NVARCHAR(100) NOT NULL,
+	digits INTEGER NOT NULL,
+	CONSTRAINT pk_currency_codes PRIMARY KEY (code),
+	CONSTRAINT ck_currency_codes_digits_range CHECK (digits>=0 AND digits<=4)
+);
 
 CREATE TABLE bia.departments (
 	id VARCHAR(36) NOT NULL,
@@ -106,7 +114,7 @@ CREATE TABLE bia.projects (
 	title NVARCHAR(100) NOT NULL,
 	[departmentId] VARCHAR(36) NOT NULL,
 	owner NVARCHAR(80) NOT NULL,
-	budget NUMERIC(18, 2) NOT NULL,
+	budget NUMERIC(19, 4) NOT NULL,
 	start DATE NOT NULL,
 	due DATE NOT NULL,
 	description NVARCHAR(1000) NULL,
@@ -163,6 +171,34 @@ CREATE INDEX ix_audit_log_at ON bia.audit_log (at);
 
 CREATE INDEX [ix_audit_log_projectId] ON bia.audit_log ([projectId]);
 
+CREATE TABLE bia.budget_change_requests (
+	id VARCHAR(36) NOT NULL,
+	[projectId] VARCHAR(36) NOT NULL,
+	title NVARCHAR(100) NOT NULL,
+	reason NVARCHAR(2000) NOT NULL,
+	amount NUMERIC(19, 4) NOT NULL,
+	status VARCHAR(10) NOT NULL,
+	[requestedById] VARCHAR(36) NOT NULL,
+	[requestedBy] NVARCHAR(100) NOT NULL,
+	[requestedDate] DATE NOT NULL,
+	[decidedById] VARCHAR(36) NULL,
+	[decidedBy] NVARCHAR(100) NULL,
+	[decisionDate] DATE NULL,
+	[decisionNote] NVARCHAR(2000) NULL,
+	[budgetBefore] NUMERIC(19, 4) NULL,
+	[budgetAfter] NUMERIC(19, 4) NULL,
+	CONSTRAINT pk_budget_change_requests PRIMARY KEY (id),
+	CONSTRAINT ck_budget_change_requests_amount_positive CHECK (amount>0),
+	CONSTRAINT ck_budget_change_requests_status_valid CHECK (status IN ('Pending','Approved','Rejected')),
+	CONSTRAINT ck_budget_change_requests_review_valid CHECK ((status='Pending' AND decidedById IS NULL AND decisionDate IS NULL AND decisionNote IS NULL AND budgetBefore IS NULL AND budgetAfter IS NULL) OR (status IN ('Approved','Rejected') AND decidedById IS NOT NULL AND decidedById<>requestedById AND decisionDate IS NOT NULL AND decisionDate>=requestedDate AND decisionNote IS NOT NULL)),
+	CONSTRAINT ck_budget_change_requests_budget_valid CHECK ((status='Approved' AND budgetBefore IS NOT NULL AND budgetAfter IS NOT NULL AND budgetBefore>=0 AND budgetAfter=budgetBefore+amount) OR (status<>'Approved' AND budgetBefore IS NULL AND budgetAfter IS NULL)),
+	CONSTRAINT [fk_budget_change_requests_projectId_projects] FOREIGN KEY([projectId]) REFERENCES bia.projects (id),
+	CONSTRAINT [fk_budget_change_requests_requestedById_users] FOREIGN KEY([requestedById]) REFERENCES bia.users (id),
+	CONSTRAINT [fk_budget_change_requests_decidedById_users] FOREIGN KEY([decidedById]) REFERENCES bia.users (id)
+);
+
+CREATE INDEX [ix_budget_change_requests_projectId] ON bia.budget_change_requests ([projectId]);
+
 CREATE TABLE bia.project_baselines (
 	id VARCHAR(36) NOT NULL,
 	[projectId] VARCHAR(36) NOT NULL,
@@ -205,12 +241,45 @@ CREATE TABLE bia.project_department_access (
 
 CREATE INDEX [ix_project_department_access_groupId] ON bia.project_department_access ([groupId]);
 
+CREATE TABLE bia.project_expenses (
+	id VARCHAR(36) NOT NULL,
+	[projectId] VARCHAR(36) NOT NULL,
+	kind VARCHAR(20) NOT NULL,
+	date DATE NOT NULL,
+	[prNumber] NVARCHAR(60) COLLATE Latin1_General_100_CI_AS_SC NOT NULL,
+	[amountJod] NUMERIC(19, 3) NOT NULL,
+	remarks NVARCHAR(1000) NOT NULL,
+	CONSTRAINT pk_project_expenses PRIMARY KEY (id),
+	CONSTRAINT ck_project_expenses_kind_valid CHECK (kind IN ('spares','miscellaneous')),
+	CONSTRAINT ck_project_expenses_amount_positive CHECK (amountJod>0),
+	CONSTRAINT [uq_project_expenses_projectId] UNIQUE ([projectId], kind, [prNumber]),
+	CONSTRAINT [fk_project_expenses_projectId_projects] FOREIGN KEY([projectId]) REFERENCES bia.projects (id)
+);
+
+CREATE INDEX [ix_project_expenses_projectId] ON bia.project_expenses ([projectId]);
+
+CREATE TABLE bia.project_finance (
+	[projectId] VARCHAR(36) NOT NULL,
+	currency VARCHAR(3) NOT NULL,
+	[usdRate] NUMERIC(18, 8) NOT NULL,
+	[rateDate] DATE NULL,
+	[vendorId] VARCHAR(36) NULL,
+	CONSTRAINT pk_project_finance PRIMARY KEY ([projectId]),
+	CONSTRAINT ck_project_finance_rate_positive CHECK (usdRate>0),
+	CONSTRAINT ck_project_finance_usd_rate_one CHECK (currency<>'USD' OR usdRate=1),
+	CONSTRAINT [fk_project_finance_projectId_projects] FOREIGN KEY([projectId]) REFERENCES bia.projects (id),
+	CONSTRAINT fk_project_finance_currency_currency_codes FOREIGN KEY(currency) REFERENCES bia.currency_codes (code),
+	CONSTRAINT [fk_project_finance_vendorId_vendors] FOREIGN KEY([vendorId]) REFERENCES bia.vendors (id)
+);
+
+CREATE INDEX [ix_project_finance_vendorId] ON bia.project_finance ([vendorId]);
+
 CREATE TABLE bia.purchase_orders (
 	id VARCHAR(36) NOT NULL,
 	[projectId] VARCHAR(36) NOT NULL,
 	number NVARCHAR(60) COLLATE Latin1_General_100_CI_AS_SC NOT NULL,
 	[vendorId] VARCHAR(36) NOT NULL,
-	amount NUMERIC(18, 2) NOT NULL,
+	amount NUMERIC(19, 4) NOT NULL,
 	date DATE NOT NULL,
 	description NVARCHAR(300) NOT NULL,
 	CONSTRAINT pk_purchase_orders PRIMARY KEY (id),
@@ -257,6 +326,22 @@ CREATE INDEX [ix_tasks_projectId] ON bia.tasks ([projectId]);
 
 CREATE INDEX [ix_tasks_resourceId] ON bia.tasks ([resourceId]);
 
+CREATE TABLE bia.vendor_consultants (
+	id VARCHAR(36) NOT NULL,
+	[vendorId] VARCHAR(36) NOT NULL,
+	[ownerProjectId] VARCHAR(36) NULL,
+	name NVARCHAR(100) COLLATE Latin1_General_100_CI_AS_SC NOT NULL,
+	active BIT NOT NULL,
+	CONSTRAINT pk_vendor_consultants PRIMARY KEY (id),
+	CONSTRAINT [uq_vendor_consultants_vendorId] UNIQUE ([vendorId], name),
+	CONSTRAINT [fk_vendor_consultants_vendorId_vendors] FOREIGN KEY([vendorId]) REFERENCES bia.vendors (id),
+	CONSTRAINT [fk_vendor_consultants_ownerProjectId_projects] FOREIGN KEY([ownerProjectId]) REFERENCES bia.projects (id)
+);
+
+CREATE INDEX [ix_vendor_consultants_ownerProjectId] ON bia.vendor_consultants ([ownerProjectId]);
+
+CREATE INDEX [ix_vendor_consultants_vendorId] ON bia.vendor_consultants ([vendorId]);
+
 CREATE TABLE bia.baseline_tasks (
 	[baselineId] VARCHAR(36) NOT NULL,
 	[taskId] VARCHAR(36) NOT NULL,
@@ -278,11 +363,44 @@ CREATE INDEX [ix_baseline_tasks_parentId] ON bia.baseline_tasks ([parentId]);
 
 CREATE INDEX [ix_baseline_tasks_taskId] ON bia.baseline_tasks ([taskId]);
 
+CREATE TABLE bia.consultant_details (
+	[consultantId] VARCHAR(36) NOT NULL,
+	designation NVARCHAR(100) NOT NULL,
+	CONSTRAINT pk_consultant_details PRIMARY KEY ([consultantId]),
+	CONSTRAINT [fk_consultant_details_consultantId_vendor_consultants] FOREIGN KEY([consultantId]) REFERENCES bia.vendor_consultants (id)
+);
+
+CREATE TABLE bia.consultant_trips (
+	id VARCHAR(36) NOT NULL,
+	[projectId] VARCHAR(36) NOT NULL,
+	[consultantId] VARCHAR(36) NOT NULL,
+	start DATE NOT NULL,
+	[end] DATE NOT NULL,
+	[biaFlight] BIT NOT NULL,
+	[biaAccommodation] BIT NOT NULL,
+	[biaFood] BIT NOT NULL,
+	[stayType] VARCHAR(20) NULL,
+	[flightBooked] BIT NOT NULL,
+	[flightCost] NUMERIC(19, 4) NULL,
+	[bookedDate] DATE NULL,
+	notes NVARCHAR(1000) NOT NULL,
+	CONSTRAINT pk_consultant_trips PRIMARY KEY (id),
+	CONSTRAINT ck_consultant_trips_dates_ordered CHECK ([end]>=start),
+	CONSTRAINT ck_consultant_trips_stay_valid CHECK ((biaAccommodation=0 AND stayType IS NULL) OR (biaAccommodation=1 AND stayType IN ('campus','external'))),
+	CONSTRAINT ck_consultant_trips_flight_valid CHECK ((flightBooked=0 AND flightCost IS NULL AND bookedDate IS NULL) OR (flightBooked=1 AND biaFlight=1 AND flightCost>0 AND bookedDate IS NOT NULL AND bookedDate<=start)),
+	CONSTRAINT [fk_consultant_trips_projectId_projects] FOREIGN KEY([projectId]) REFERENCES bia.projects (id),
+	CONSTRAINT [fk_consultant_trips_consultantId_vendor_consultants] FOREIGN KEY([consultantId]) REFERENCES bia.vendor_consultants (id)
+);
+
+CREATE INDEX [ix_consultant_trips_consultantId] ON bia.consultant_trips ([consultantId]);
+
+CREATE INDEX [ix_consultant_trips_projectId] ON bia.consultant_trips ([projectId]);
+
 CREATE TABLE bia.invoices (
 	id VARCHAR(36) NOT NULL,
 	[poId] VARCHAR(36) NOT NULL,
 	number NVARCHAR(60) COLLATE Latin1_General_100_CI_AS_SC NOT NULL,
-	amount NUMERIC(18, 2) NOT NULL,
+	amount NUMERIC(19, 4) NOT NULL,
 	date DATE NOT NULL,
 	due DATE NOT NULL,
 	CONSTRAINT pk_invoices PRIMARY KEY (id),
@@ -293,6 +411,24 @@ CREATE TABLE bia.invoices (
 );
 
 CREATE INDEX [ix_invoices_poId] ON bia.invoices ([poId]);
+
+CREATE TABLE bia.payment_terms (
+	id VARCHAR(36) NOT NULL,
+	[projectId] VARCHAR(36) NOT NULL,
+	title NVARCHAR(100) NOT NULL,
+	amount NUMERIC(19, 4) NOT NULL,
+	[trigger] VARCHAR(20) NOT NULL,
+	[dueDate] DATE NULL,
+	[milestoneId] VARCHAR(36) NULL,
+	cancelled BIT NOT NULL,
+	CONSTRAINT pk_payment_terms PRIMARY KEY (id),
+	CONSTRAINT fk_terms_milestone_project FOREIGN KEY([milestoneId], [projectId]) REFERENCES bia.tasks (id, [projectId]),
+	CONSTRAINT ck_payment_terms_amount_positive CHECK (amount>0),
+	CONSTRAINT ck_payment_terms_valid_trigger CHECK (([trigger]='date' AND dueDate IS NOT NULL AND milestoneId IS NULL) OR ([trigger]='milestone' AND dueDate IS NULL AND milestoneId IS NOT NULL)),
+	CONSTRAINT [fk_payment_terms_projectId_projects] FOREIGN KEY([projectId]) REFERENCES bia.projects (id)
+);
+
+CREATE INDEX [ix_payment_terms_projectId] ON bia.payment_terms ([projectId]);
 
 CREATE TABLE bia.progress_updates (
 	id VARCHAR(36) NOT NULL,
@@ -331,6 +467,16 @@ CREATE TABLE bia.task_predecessors (
 
 CREATE INDEX [ix_task_predecessors_predecessorId] ON bia.task_predecessors ([predecessorId]);
 
+CREATE TABLE bia.invoice_budget_changes (
+	[invoiceId] VARCHAR(36) NOT NULL,
+	[changeRequestId] VARCHAR(36) NOT NULL,
+	CONSTRAINT pk_invoice_budget_changes PRIMARY KEY ([invoiceId]),
+	CONSTRAINT [fk_invoice_budget_changes_invoiceId_invoices] FOREIGN KEY([invoiceId]) REFERENCES bia.invoices (id),
+	CONSTRAINT [fk_invoice_budget_changes_changeRequestId_budget_change_requests] FOREIGN KEY([changeRequestId]) REFERENCES bia.budget_change_requests (id)
+);
+
+CREATE INDEX [ix_invoice_budget_changes_changeRequestId] ON bia.invoice_budget_changes ([changeRequestId]);
+
 CREATE TABLE bia.invoice_payments (
 	[invoiceId] VARCHAR(36) NOT NULL,
 	reference NVARCHAR(100) NOT NULL,
@@ -342,6 +488,359 @@ CREATE TABLE bia.invoice_payments (
 );
 
 CREATE INDEX [ix_invoice_payments_recordedById] ON bia.invoice_payments ([recordedById]);
+
+CREATE TABLE bia.invoice_terms (
+	[invoiceId] VARCHAR(36) NOT NULL,
+	[termId] VARCHAR(36) NOT NULL,
+	CONSTRAINT pk_invoice_terms PRIMARY KEY ([invoiceId]),
+	CONSTRAINT [fk_invoice_terms_invoiceId_invoices] FOREIGN KEY([invoiceId]) REFERENCES bia.invoices (id),
+	CONSTRAINT [uq_invoice_terms_termId] UNIQUE ([termId]),
+	CONSTRAINT [fk_invoice_terms_termId_payment_terms] FOREIGN KEY([termId]) REFERENCES bia.payment_terms (id)
+);
+
+CREATE TABLE bia.trip_costs (
+	[tripId] VARCHAR(36) NOT NULL,
+	[flightCostJod] NUMERIC(19, 3) NULL,
+	[hotelBookedBy] VARCHAR(10) NULL,
+	[hotelCostJod] NUMERIC(19, 3) NOT NULL,
+	[visaCostJod] NUMERIC(19, 3) NOT NULL,
+	CONSTRAINT pk_trip_costs PRIMARY KEY ([tripId]),
+	CONSTRAINT ck_trip_costs_flight_positive CHECK (flightCostJod IS NULL OR flightCostJod>0),
+	CONSTRAINT ck_trip_costs_costs_nonnegative CHECK (hotelCostJod>=0 AND visaCostJod>=0),
+	CONSTRAINT ck_trip_costs_booker_valid CHECK (hotelBookedBy IS NULL OR hotelBookedBy IN ('bia','vendor')),
+	CONSTRAINT ck_trip_costs_bia_hotel_only CHECK (hotelCostJod=0 OR hotelBookedBy='bia'),
+	CONSTRAINT [fk_trip_costs_tripId_consultant_trips] FOREIGN KEY([tripId]) REFERENCES bia.consultant_trips (id)
+);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('AED', N'UAE Dirham', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('AFN', N'Afghani', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('ALL', N'Lek', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('AMD', N'Armenian Dram', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('AOA', N'Kwanza', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('ARS', N'Argentine Peso', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('AUD', N'Australian Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('AWG', N'Aruban Florin', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('AZN', N'Azerbaijan Manat', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BAM', N'Convertible Mark', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BBD', N'Barbados Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BDT', N'Taka', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BHD', N'Bahraini Dinar', 3);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BIF', N'Burundi Franc', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BMD', N'Bermudian Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BND', N'Brunei Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BOB', N'Boliviano', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BOV', N'Mvdol', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BRL', N'Brazilian Real', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BSD', N'Bahamian Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BTN', N'Ngultrum', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BWP', N'Pula', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BYN', N'Belarusian Ruble', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('BZD', N'Belize Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CAD', N'Canadian Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CDF', N'Congolese Franc', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CHE', N'WIR Euro', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CHF', N'Swiss Franc', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CHW', N'WIR Franc', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CLF', N'Unidad de Fomento', 4);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CLP', N'Chilean Peso', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CNY', N'Yuan Renminbi', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('COP', N'Colombian Peso', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('COU', N'Unidad de Valor Real', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CRC', N'Costa Rican Colon', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CUP', N'Cuban Peso', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CVE', N'Cabo Verde Escudo', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('CZK', N'Czech Koruna', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('DJF', N'Djibouti Franc', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('DKK', N'Danish Krone', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('DOP', N'Dominican Peso', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('DZD', N'Algerian Dinar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('EGP', N'Egyptian Pound', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('ERN', N'Nakfa', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('ETB', N'Ethiopian Birr', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('EUR', N'Euro', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('FJD', N'Fiji Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('FKP', N'Falkland Islands Pound', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('GBP', N'Pound Sterling', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('GEL', N'Lari', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('GHS', N'Ghana Cedi', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('GIP', N'Gibraltar Pound', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('GMD', N'Dalasi', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('GNF', N'Guinean Franc', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('GTQ', N'Quetzal', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('GYD', N'Guyana Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('HKD', N'Hong Kong Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('HNL', N'Lempira', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('HTG', N'Gourde', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('HUF', N'Forint', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('IDR', N'Rupiah', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('ILS', N'New Israeli Sheqel', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('INR', N'Indian Rupee', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('IQD', N'Iraqi Dinar', 3);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('IRR', N'Iranian Rial', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('ISK', N'Iceland Krona', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('JMD', N'Jamaican Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('JOD', N'Jordanian Dinar', 3);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('JPY', N'Yen', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('KES', N'Kenyan Shilling', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('KGS', N'Som', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('KHR', N'Riel', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('KMF', N'Comorian Franc ', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('KPW', N'North Korean Won', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('KRW', N'Won', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('KWD', N'Kuwaiti Dinar', 3);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('KYD', N'Cayman Islands Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('KZT', N'Tenge', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('LAK', N'Lao Kip', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('LBP', N'Lebanese Pound', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('LKR', N'Sri Lanka Rupee', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('LRD', N'Liberian Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('LSL', N'Loti', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('LYD', N'Libyan Dinar', 3);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MAD', N'Moroccan Dirham', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MDL', N'Moldovan Leu', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MGA', N'Malagasy Ariary', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MKD', N'Denar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MMK', N'Kyat', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MNT', N'Tugrik', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MOP', N'Pataca', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MRU', N'Ouguiya', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MUR', N'Mauritius Rupee', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MVR', N'Rufiyaa', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MWK', N'Malawi Kwacha', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MXN', N'Mexican Peso', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MXV', N'Mexican Unidad de Inversion (UDI)', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MYR', N'Malaysian Ringgit', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('MZN', N'Mozambique Metical', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('NAD', N'Namibia Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('NGN', N'Naira', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('NIO', N'Cordoba Oro', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('NOK', N'Norwegian Krone', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('NPR', N'Nepalese Rupee', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('NZD', N'New Zealand Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('OMR', N'Rial Omani', 3);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('PAB', N'Balboa', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('PEN', N'Sol', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('PGK', N'Kina', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('PHP', N'Philippine Peso', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('PKR', N'Pakistan Rupee', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('PLN', N'Zloty', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('PYG', N'Guarani', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('QAR', N'Qatari Rial', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('RON', N'Romanian Leu', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('RSD', N'Serbian Dinar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('RUB', N'Russian Ruble', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('RWF', N'Rwanda Franc', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SAR', N'Saudi Riyal', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SBD', N'Solomon Islands Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SCR', N'Seychelles Rupee', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SDG', N'Sudanese Pound', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SEK', N'Swedish Krona', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SGD', N'Singapore Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SHP', N'Saint Helena Pound', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SLE', N'Leone', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SOS', N'Somali Shilling', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SRD', N'Surinam Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SSP', N'South Sudanese Pound', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('STN', N'Dobra', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SVC', N'El Salvador Colon', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SYP', N'Syrian Pound', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('SZL', N'Lilangeni', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('THB', N'Baht', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('TJS', N'Somoni', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('TMT', N'Turkmenistan New Manat', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('TND', N'Tunisian Dinar', 3);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('TOP', N'Pa’anga', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('TRY', N'Turkish Lira', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('TTD', N'Trinidad and Tobago Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('TWD', N'New Taiwan Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('TZS', N'Tanzanian Shilling', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('UAH', N'Hryvnia', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('UGX', N'Uganda Shilling', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('USD', N'US Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('USN', N'US Dollar (Next day)', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('UYI', N'Uruguay Peso en Unidades Indexadas (UI)', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('UYU', N'Peso Uruguayo', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('UYW', N'Unidad Previsional', 4);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('UZS', N'Uzbekistan Sum', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('VED', N'Bolívar Soberano', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('VES', N'Bolívar Soberano', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('VND', N'Dong', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('VUV', N'Vatu', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('WST', N'Tala', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('XAD', N'Arab Accounting Dinar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('XAF', N'CFA Franc BEAC', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('XCD', N'East Caribbean Dollar', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('XCG', N'Caribbean Guilder', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('XOF', N'CFA Franc BCEAO', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('XPF', N'CFP Franc', 0);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('YER', N'Yemeni Rial', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('ZAR', N'Rand', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('ZMW', N'Zambian Kwacha', 2);
+
+INSERT INTO bia.currency_codes (code, name, digits) VALUES ('ZWG', N'Zimbabwe Gold', 2);
 
 INSERT INTO bia.roles (code, name) VALUES ('admin', N'Administrator');
 
@@ -373,7 +872,7 @@ INSERT INTO bia.master_projects (id, title, [primaryDepartmentId], owner, descri
 
 INSERT INTO bia.workspace (id, version) VALUES (1, 1);
 
-INSERT INTO bia.schema_migrations (version, appliedAt) VALUES (8, SYSUTCDATETIME());
+INSERT INTO bia.schema_migrations (version, appliedAt) VALUES (12, SYSUTCDATETIME());
 
 COMMIT TRANSACTION;
 END TRY

@@ -12,7 +12,7 @@ UNION ALL SELECT N'Cannot delete audit', IIF(HAS_PERMS_BY_NAME('bia.audit_log','
 UNION ALL SELECT N'Cannot edit progress history', IIF(HAS_PERMS_BY_NAME('bia.progress_updates','OBJECT','UPDATE')=0,1,0)
 UNION ALL SELECT N'Cannot edit payments', IIF(HAS_PERMS_BY_NAME('bia.invoice_payments','OBJECT','UPDATE')=0,1,0)
 UNION ALL SELECT N'Cannot modify role definitions', IIF(HAS_PERMS_BY_NAME('bia.roles','OBJECT','UPDATE')=0,1,0)
-UNION ALL SELECT N'Schema version is 8', IIF(EXISTS(SELECT 1 FROM bia.schema_migrations WHERE version=9),1,0);
+UNION ALL SELECT N'Schema version is 12', IIF(EXISTS(SELECT 1 FROM bia.schema_migrations WHERE version=12),1,0);
 -- On upgrades, this result must be empty.
 SELECT N'UNEXPECTED legacy read permission' AS finding, t.name
 FROM sys.tables t WHERE t.schema_id=SCHEMA_ID('dbo') AND t.name IN

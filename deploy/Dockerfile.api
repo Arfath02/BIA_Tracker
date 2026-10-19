@@ -11,6 +11,7 @@ WORKDIR /app
 COPY production/requirements.lock /app/requirements.lock
 RUN pip install --no-cache-dir -r requirements.lock && useradd --uid 10001 --create-home bia
 COPY --chown=bia:bia production /app/production
+COPY --chown=bia:bia shared /app/shared
 USER 10001:10001
 EXPOSE 8000
 CMD ["uvicorn","production.app:app","--host","0.0.0.0","--port","8000","--workers","2","--no-proxy-headers"]

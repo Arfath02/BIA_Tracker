@@ -1,3 +1,4 @@
+import {financeScope} from './finance.js';
 import {catalogRows} from './catalogs.js';
 export const DEFAULT_MASTER_ID='bia-digital-transformation';
 export const defaultMaster=()=>({id:DEFAULT_MASTER_ID,title:'BIA Digital Transformation',primaryDepartment:'Digital & IT',owner:'Transformation office',description:'Digital transformation programmes and workstreams.'});
@@ -12,5 +13,5 @@ export function scopeToMaster(state,masterId){
  const projects=s.projects.filter(p=>p.masterId===masterId),projectIds=new Set(projects.map(p=>p.id));
  const tasks=s.tasks.filter(t=>projectIds.has(t.projectId)),taskIds=new Set(tasks.map(t=>t.id));
  const pos=s.pos.filter(p=>projectIds.has(p.projectId)),poIds=new Set(pos.map(p=>p.id));
- return {...s,projects,tasks,pos,invoices:s.invoices.filter(i=>poIds.has(i.poId)),updates:s.updates.filter(u=>taskIds.has(u.taskId))};
+ return {...s,...financeScope(s,projects),projects,tasks,pos,invoices:s.invoices.filter(i=>poIds.has(i.poId)),updates:s.updates.filter(u=>taskIds.has(u.taskId))};
 }

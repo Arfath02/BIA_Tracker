@@ -1,4 +1,5 @@
-"""Explicit, transactional v1-v6 -> v7 copy. Never drops or rewrites legacy tables."""
+from .commercial import CURRENCIES
+"""Explicit, transactional preserving migration to v12. Never drops or rewrites legacy tables."""
 from datetime import datetime, timezone
 import re
 from uuid import uuid4
@@ -90,7 +91,7 @@ def legacy_snapshot(db):
 def empty_state():
     s=dict(masterProjects=[default_master()],projects=[],tasks=[],pos=[],invoices=[],updates=[],audit=[],users=[],version=1)
     s['catalogs']=catalog_rows(s)
-    return s
+    return with_access(s)
 
 def initialize(engine):
     with engine.begin() as db:
@@ -107,10 +108,17 @@ def initialize(engine):
             if versions and max(versions)>d.SCHEMA_VERSION: raise RuntimeError('Database is newer than this application.')
             if d.SCHEMA_VERSION in versions:
                 print('Current schema already installed; no data changed.');return
-            if 7 in versions or 8 in versions:
-                d.metadata.create_all(db, tables=[d.milestones,d.baselines,d.baseline_tasks,d.project_days_off])
+            if any(v in versions for v in [7,8,9,10,11]):
+                d.metadata.create_all(db, tables=[d.milestones,d.baselines,d.baseline_tasks,d.project_days_off]+d.COMMERCIAL_TABLES+d.EXPENSE_TABLES+d.CHANGE_TABLES)
+                if not db.execute(select(d.currency_codes.c.code)).first(): db.execute(insert(d.currency_codes),list(CURRENCIES.values()))
+                if db.dialect.name=='mssql' and max(versions)<10:
+                    for table,column in [('projects','budget'),('purchase_orders','amount'),('invoices','amount')]:
+                        constraint=f'ck_{table}_'+('budget_nonnegative' if column=='budget' else 'amount_positive')
+                        db.execute(text(f'ALTER TABLE bia.{table} DROP CONSTRAINT {constraint}'))
+                        db.execute(text(f'ALTER TABLE bia.{table} ALTER COLUMN {column} DECIMAL(19,4) NOT NULL'))
+                        db.execute(text(f'ALTER TABLE bia.{table} WITH CHECK ADD CONSTRAINT {constraint} CHECK ({column}'+('>=0' if column=='budget' else '>0')+')'))
                 db.execute(insert(d.schema_migrations).values(version=d.SCHEMA_VERSION,appliedAt=datetime.now(timezone.utc)))
-                print('Schema v9 installed; original plans preserved. No baseline was assumed or created.');return
+                print('Schema v12 installed; original plans preserved. No baseline was assumed or created.');return
         source=legacy_snapshot(db)
         d.metadata.create_all(db)
         # Refuse partially populated targets; don't merge unrelated installations.
@@ -118,6 +126,7 @@ def initialize(engine):
             if db.execute(select(func.count()).select_from(table)).scalar_one():
                 raise RuntimeError('Unversioned target schema contains data. Restore/reconcile it before migration.')
         db.execute(insert(d.roles),d.ROLE_ROWS)
+        db.execute(insert(d.currency_codes),list(CURRENCIES.values()))
         state=source or empty_state()
         for row in state['catalogs']:
             db.execute(insert(d.LOOKUPS[row['kind']]).values(**{k:row[k] for k in ('id','name','active')}))
@@ -127,14 +136,14 @@ def initialize(engine):
         db.execute(insert(d.workspace).values(id=1,version=state['version']))
         actual=d.read_state(db)
         for key in d.TABLES:
-            if {r['id'] for r in actual[key]}!={r['id'] for r in state[key]}:
+            if {r['id'] for r in actual[key]}!={r['id'] for r in state.get(key,[])}:
                 raise RuntimeError('Migration verification failed for '+key)
         for key,field in [('projects','budget'),('pos','amount'),('invoices','amount')]:
             from decimal import Decimal
-            before=sum(Decimal(str(r[field])) for r in state[key])
+            before=sum(Decimal(str(r[field])) for r in state.get(key,[]))
             after=sum(Decimal(str(r[field])) for r in actual[key])
             if before!=after: raise RuntimeError('Financial reconciliation failed for '+key)
         if {i['id'] for i in actual['invoices'] if i['status']=='Paid'}!={i['id'] for i in state['invoices'] if i['status']=='Paid'}:
             raise RuntimeError('Payment reconciliation failed.')
         db.execute(insert(d.schema_migrations).values(version=d.SCHEMA_VERSION,appliedAt=datetime.now(timezone.utc)))
-    print('Schema v8 ready: normalized tables installed; legacy tables preserved; old sessions not copied.')
+    print('Schema v12 ready: normalized tables installed; legacy tables preserved; old sessions not copied.')

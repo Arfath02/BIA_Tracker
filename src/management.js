@@ -1,3 +1,4 @@
+import {financeScope} from './finance.js';
 import {projectVariance,projectCompletion} from './baselines.js';
 import {catalogRows} from './catalogs.js';
 import {leaves,progress,projectStatus,taskStatus,totals,today} from './domain.js';
@@ -11,7 +12,7 @@ export function projectReportStatus(s,p){
 }
 export function projectScope(s,projects){
  const ids=new Set(projects.map(p=>p.id)),tasks=s.tasks.filter(t=>ids.has(t.projectId)),taskIds=new Set(tasks.map(t=>t.id)),pos=s.pos.filter(p=>ids.has(p.projectId)),poIds=new Set(pos.map(p=>p.id));
- return {...s,projects,tasks,pos,invoices:s.invoices.filter(i=>poIds.has(i.poId)),updates:s.updates.filter(u=>taskIds.has(u.taskId))};
+ return {...s,...financeScope(s,projects),projects,tasks,pos,invoices:s.invoices.filter(i=>poIds.has(i.poId)),updates:s.updates.filter(u=>taskIds.has(u.taskId))};
 }
 export function reportSummary(s,projects=s.projects){
  const scoped=projectScope(s,projects),work=leaves(scoped),statuses=projects.map(p=>projectReportStatus(s,p));

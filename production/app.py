@@ -36,7 +36,7 @@ class Login(BaseModel):
     password:str=Field(max_length=128)
 class Command(BaseModel):
     model_config=ConfigDict(extra='forbid')
-    action:Literal['project','task','update','po','invoice','payment','catalog','user_edit','master','project_access','baseline','project_dates','project_calendar']
+    action:Literal['project','task','update','po','invoice','payment','catalog','user_edit','master','project_access','baseline','project_dates','project_calendar','project_commercial','payment_term','consultant','trip','expense','change_request','change_decision']
     version:int=Field(ge=1,strict=True)
     payload:dict
 class Active(BaseModel):
@@ -60,10 +60,7 @@ async def validation(request,ex): return JSONResponse({'error':'Check required f
 @app.middleware('http')
 async def security(request,call_next):
     if request.method not in ['GET','HEAD']:
-        origin = request.headers.get('origin', '').rstrip('/')
-        host = request.headers.get('host', '')
-        same_host = origin in (f'http://{host}', f'https://{host}') or not origin
-        if (origin not in origins and not same_host and not TESTING) or request.headers.get('x-bia-request') != '1': return JSONResponse({'error':'Cross-origin or invalid request denied.'},403)
+        if request.headers.get('origin') not in origins or request.headers.get('x-bia-request')!='1': return JSONResponse({'error':'Cross-origin or invalid request denied.'},403)
         if not request.headers.get('content-type','').startswith('application/json'): return JSONResponse({'error':'JSON body required.'},415)
         try: size=int(request.headers.get('content-length','0'))
         except ValueError: return JSONResponse({'error':'Invalid request size.'},400)
@@ -75,9 +72,9 @@ async def security(request,call_next):
             chunks.append(chunk)
         request._body=b''.join(chunks)
     try: response=await call_next(request)
-    except Exception as e:
+    except Exception:
         event_id=secrets.token_hex(8)
-        logging.getLogger('bia.security').error('Unhandled API error; event=%s path=%s: %s',event_id,request.url.path,e,exc_info=True)
+        logging.getLogger('bia.security').error('Unhandled API error; event=%s path=%s',event_id,request.url.path)
         response=JSONResponse({'error':'Unable to complete this request. Contact the administrator with reference '+event_id+'.'},status_code=500)
     for k,v in {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'",'Strict-Transport-Security':'max-age=31536000'}.items(): response.headers[k]=v
     return response
@@ -116,7 +113,7 @@ def health():
     with engine.connect() as db:
         db.execute(select(d.workspace.c.version).where(d.workspace.c.id==1)).scalar_one()
         if db.execute(select(d.schema_migrations.c.version).where(d.schema_migrations.c.version==d.SCHEMA_VERSION)).scalar_one_or_none()!=d.SCHEMA_VERSION: reject('Schema upgrade required.',503)
-    return {'status':'ok'}
+    return {'status':'ok','schemaVersion':d.SCHEMA_VERSION,'apiRelease':'2026-10-18.1'}
 @app.get('/api/state')
 def state(request:Request):
     with engine.begin() as db:
